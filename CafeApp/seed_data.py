@@ -1,6 +1,6 @@
 import random
 import datetime
-from app import app, db
+from CafeApp import app, db
 from models import *
 
 def seed_data():

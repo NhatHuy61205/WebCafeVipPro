@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer,Time, String, DateTime, Enum as SqlEnum,Date, Float, ForeignKey
 from sqlalchemy.orm import relationship
 
-from app import db, app
+from CafeApp import db, app
 import datetime
 from enum import Enum
 

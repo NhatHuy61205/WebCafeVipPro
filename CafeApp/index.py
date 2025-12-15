@@ -1,6 +1,6 @@
 from flask import Flask, render_template
-from app import app
-from app.models import Mon
+from CafeApp import app
+from CafeApp.models import Mon
 
 
 @app.route("/")
