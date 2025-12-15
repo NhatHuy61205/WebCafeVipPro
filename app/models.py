@@ -1,19 +1,17 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum as SqlEnum, Boolean
-from app import db
+from sqlalchemy import Column, Integer,Time, String, DateTime, Enum as SqlEnum,Date, Float, ForeignKey
+from sqlalchemy.orm import relationship
+
+from app import db, app
 import datetime
 from enum import Enum
+
 
 class Base(db.Model):
     __abstract__ = True
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True, nullable= True, unique=True)
     name = Column(String(150), nullable=False)
-
-    created_date = Column(
-        DateTime,
-        default=datetime.datetime.now
-    )
-    active = Column(Boolean, default=True)
+    ngayTao = Column(DateTime, default=datetime.datetime.now)
 
     def __str__(self):
         return self.name
@@ -29,28 +27,185 @@ class TrangThaiEnum(Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
 
-class NhanVienCuaHang(Base):
-    __abstract__ = True
 
-    ten = Column(String(150), nullable=False)
+class NhanVienCuaHang(Base):
 
     sdt = Column(String(20), nullable=False, unique=True)
+    tenDangNhap = Column(String(100), nullable=True, unique=True)
+    matKhau = Column(String(150), nullable=True)
+    role = Column( SqlEnum(RoleEnum), nullable=False, default=RoleEnum.NHAN_VIEN)
+    trangThai = Column( SqlEnum(TrangThaiEnum),default=TrangThaiEnum.ACTIVE)
 
-    tenDangNhap = Column(String(100), nullable=False, unique=True)
 
-    matKhau = Column(String(150), nullable=False)
+class LoaiDungEnum(Enum):
+    TAI_QUAN = "TAI_QUAN"
+    TAI_NHA = "TAI_NHA"
+    MANG_DI = "MANG_DI"
 
-    ngayTao = Column(
-        DateTime,
-        default=datetime.datetime.now
-    )
 
-    role = Column(
-        SqlEnum(RoleEnum),
-        nullable=False
-    )
+class KhachHang(Base):
 
-    trangThai = Column(
-        SqlEnum(TrangThaiEnum),
-        default=TrangThaiEnum.ACTIVE
-    )
+    sdt = Column(String(20), nullable=False, unique=True)
+    diaChi = Column(String(255), nullable=True)
+    tongDonHangDaMua = Column(Integer, default=0)
+    loaiKhachHang = Column(SqlEnum(LoaiDungEnum),nullable=False)
+    email = Column(String(150), nullable=True, unique=True)
+
+
+class TrangThaiHoaDonEnum(Enum):
+    TAM = "TAM"
+    CHO_THANH_TOAN = "CHO_THANH_TOAN"
+    DA_THANH_TOAN = "DA_THANH_TOAN"
+    DANG_CHE_BIEN = "DANG_CHE_BIEN"
+    HOAN_THANH = "HOAN_THANH"
+
+
+class HoaDon(Base):
+
+    ngayThanhToan = Column(DateTime, nullable=True)
+    soBan = Column(Integer, nullable=True)
+    tongTienHang = Column(Float, default=0.0)
+    thue = Column(Float, default=0.0)
+    phiPhucVu = Column(Float, default=0.0)
+    giamGia = Column(Float, default=0.0)
+    tongThanhToan = Column(Float, default=0.0)
+    loaiHoaDon = Column(SqlEnum(LoaiDungEnum),nullable=False)
+    trangThai = Column(SqlEnum(TrangThaiHoaDonEnum),default=TrangThaiHoaDonEnum.TAM)
+    khachHang_id = Column(Integer, ForeignKey(KhachHang.__table__.c.id), nullable=True)
+
+
+
+
+class TrangThaiMonEnum(Enum):
+    DANG_BAN = "DANG_BAN"
+    TAM_HET = "TAM_HET"
+    NGUNG_BAN = "NGUNG_BAN"
+
+class Mon(Base):
+    chiTietHoaDon = relationship("ChiTietHoaDon", backref="mon", lazy=True)
+    congThuc = relationship("CongThuc", backref="mon", lazy=True)
+    gia = Column(Float, nullable=False)
+    moTa = Column(String(255), nullable=True)
+    trangThai = Column(SqlEnum(TrangThaiMonEnum), default=TrangThaiMonEnum.DANG_BAN)
+    image = Column(String(255))
+
+
+class ChiTietHoaDon(db.Model):
+
+    id = Column(Integer, primary_key=True, autoincrement=True, unique=True, nullable=True)
+    soLuong = Column(Integer, nullable=False)
+    donGia = Column(Float, nullable=False)
+    thanhTien = Column(Float, nullable=False)
+    ghiChu = Column(String(255), nullable=True)
+
+    hoaDon_id = Column(Integer, ForeignKey(HoaDon.__table__.c.id), nullable=False)
+    mon_id = Column(Integer, ForeignKey(Mon.__table__.c.id), nullable=False)
+
+
+class TrangThaiThanhToanEnum(Enum):
+    CHO_XU_LY = "CHO_XU_LY"
+    THANH_CONG = "THANH_CONG"
+    THAT_BAI = "THAT_BAI"
+
+class ThanhToan(Base):
+
+    soTien = Column(Float, nullable=False)
+    trangThai = Column(SqlEnum(TrangThaiThanhToanEnum), default=TrangThaiThanhToanEnum.CHO_XU_LY)
+    hoaDon_id = Column(Integer, ForeignKey(HoaDon.__table__.c.id), nullable=False)
+
+
+
+class BaoCaoDoanhThu(Base):
+
+    tuNgay = Column(Date, nullable=False)
+    denNgay = Column(Date, nullable=False)
+    tongSoHoaDon = Column(Integer, default=0)
+    tongDoanhThu = Column(Float, default=0.0)
+    tongGiamGia = Column(Float, default=0.0)
+    tongThue = Column(Float, default=0.0)
+    tongPhiDichVu = Column(Float, default=0.0)
+
+
+class TrangThaiNguyenLieuEnum(Enum):
+    CON_HANG = "CON_HANG"
+    SAP_HET = "SAP_HET"
+    HET_HANG = "HET_HANG"
+
+
+class NguyenLieu(Base):
+    congThuc = relationship("CongThuc", backref="nguyenLieu", lazy=True)
+    chiTietNhap = relationship("ChiTietPhieuNhap", backref="nguyenLieu", lazy=True)
+    donViTinh = Column(String(50), nullable=False)
+    soLuongTon = Column(Float, default=0.0)
+    giaMuaToiThieu = Column(Float, default=0.0)
+    trangThai = Column(SqlEnum(TrangThaiNguyenLieuEnum),default=TrangThaiNguyenLieuEnum.CON_HANG)
+
+
+
+class PhieuNhap(Base):
+    chiTiet = relationship("ChiTietPhieuNhap", backref="phieuNhap", lazy=True)
+    tongSoNguyenLieu = Column(Integer, default=0)
+    tongGiaTriNhap = Column(Integer, default=0)
+    ghiChu = Column(String(255), nullable=True)
+    nguoiNhap_id = Column(Integer, ForeignKey(NhanVienCuaHang.__table__.c.id), nullable=False)
+
+
+
+class ChiTietPhieuNhap(db.Model):
+
+    id = Column(Integer, primary_key=True, autoincrement=True, nullable=True, unique=True)
+    soLuongNhap = Column(Float, nullable=False)
+    donGiaNhap = Column(Float, nullable=False)
+    thanhTien = Column(Float, nullable=False)
+
+    phieuNhap_id = Column(Integer, ForeignKey(PhieuNhap.__table__.c.id), nullable=False)
+    nguyenLieu_id = Column(Integer, ForeignKey(NguyenLieu.__table__.c.id), nullable=False)
+
+
+class CongThuc(db.Model):
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    dinhLuong = Column(Float, nullable=False)
+
+    mon_id = Column(Integer, ForeignKey(Mon.__table__.c.id), nullable=False)
+    nguyenLieu_id = Column(Integer, ForeignKey(NguyenLieu.__table__.c.id), nullable=False)
+
+
+class LoaiQREnum(Enum):
+    THANH_TOAN = "THANH_TOAN"
+    HOA_DON_TAM = "HOA_DON_TAM"
+    NHAP_SO_BAN = "NHAP_SO_BAN"
+
+
+class TrangThaiQREnum(Enum):
+    CON_HIEU_LUC = "CON_HIEU_LUC"
+    HET_HIEU_LUC = "HET_HIEU_LUC"
+
+class QRCode(db.Model):
+
+    maQR = Column(String(255), primary_key=True, nullable=True)
+    loaiQR = Column(SqlEnum(LoaiQREnum),nullable=False)
+    noiDungQR = Column(String(255), nullable=False)
+    ngayTao = Column(DateTime,default=datetime.datetime.now)
+    trangThai = Column(SqlEnum(TrangThaiQREnum),default=TrangThaiQREnum.CON_HIEU_LUC)
+
+    hoaDon_id = Column(Integer, ForeignKey(HoaDon.__table__.c.id), nullable=True)
+
+
+
+class SchedulerBot(db.Model):
+    id = Column(Integer, primary_key=True, autoincrement=True, nullable=True)
+    gioChayHangNgay = Column(Time, nullable=False)
+
+    trangThai = Column(SqlEnum(TrangThaiEnum),default=TrangThaiEnum.ACTIVE)
+
+class BaoCaoTonKho(Base):
+
+    tongSoNguyenLieu = Column(Integer, default=0)
+    soNguyenLieuSapHet = Column(Integer, default=0)
+    soNguyenLieuHetHang = Column(Integer, default=0)
+
+if __name__=="__main__":
+    with app.app_context():
+        db.drop_all()
+        db.create_all()
