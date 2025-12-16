@@ -8,14 +8,90 @@ def index():
     ds_mon = Mon.query.all()
     return render_template("index.html", items=ds_mon)
 
-@app.route("/menu")
-def menu():
-    ds_mon = Mon.query.all()
-    return render_template("layout/menu.html", items=ds_mon)
 
 @app.route("/login")
 def login():
     return render_template("layout/login.html")
+
+
+
+def get_cart():
+    return session.get("cart", {})
+
+def save_cart(cart):
+    session["cart"] = cart
+    session.modified = True
+
+def cart_stats(cart):
+    total_qty = 0
+    total_amount = 0.0
+    for item in cart.values():
+        total_qty += item["quantity"]
+        total_amount += item["quantity"] * item["price"]
+    return total_qty, total_amount
+
+@app.route("/menu", methods = ['get'])
+def menu():
+    items = Mon.query.filter(Mon.trangThai == "DANG_BAN").all()
+    cart = get_cart()
+    total_qty, total_amount = cart_stats(cart)
+    return render_template("layout/menu.html",
+                           items=items,
+                           cart=cart,
+                           total_qty=total_qty,
+                           total_amount=total_amount)
+
+@app.route("/cart/add", methods = ['post'])
+def cart_add():
+    mon_id = int(request.form.get("mon_id", 0))
+    qty = int(request.form.get("quantity", 1))
+    if mon_id <= 0 or qty <= 0:
+        return redirect(url_for("menu"))
+
+    mon = Mon.query.get(mon_id)
+    if not mon:
+        return redirect(url_for("menu"))
+
+    cart = get_cart()
+    key = str(mon_id)
+
+    if key not in cart:
+        cart[key] = {
+            "id": mon.id,
+            "name": mon.name,
+            "price": float(mon.gia),
+            "image": mon.image or "",
+            "quantity": 0
+        }
+
+    cart[key]["quantity"] += qty
+    save_cart(cart)
+
+    return redirect(url_for("menu"))
+
+@app.route("/cart/update", methods = ['post'])
+def cart_update():
+    mon_id = str(int(request.form.get("mon_id", 0)))
+    qty = int(request.form.get("quantity", 1))
+
+    cart = get_cart()
+    if mon_id in cart:
+        if qty <= 0:
+            cart.pop(mon_id, None)
+        else:
+            cart[mon_id]["quantity"] = qty
+        save_cart(cart)
+
+    return redirect(url_for("menu"))
+
+@app.route("/cart/remove", methods = ['post'])
+def cart_remove():
+    mon_id = str(int(request.form.get("mon_id", 0)))
+    cart = get_cart()
+    cart.pop(mon_id, None)
+    save_cart(cart)
+    return redirect(url_for("menu"))
+
 
 @app.route("/pos")
 def pos_page():
@@ -26,73 +102,6 @@ def pos_page():
     # 2. Lấy danh sách món ăn từ DB
     ds_mon = Mon.query.all()
     
-    # 3. Lấy dữ liệu giỏ hàng từ hàm get_cart_data() vừa tạo
-    data = get_cart_data()
-    
-    # 4. Gửi tất cả sang HTML (QUAN TRỌNG: Phải có cart_session)
-    return render_template("pos.html", 
-                           items=ds_mon, 
-                           cart=data['cart'], 
-                           total=data['total'], 
-                           cart_session=data['cart_session'])
-
-def get_cart_data():
-    cart_session = session.get('pos_cart', {})
-    cart_list = []
-    total_price = 0
-    
-    if cart_session:
-        # Lấy thông tin chi tiết các món trong giỏ
-        products = Mon.query.filter(Mon.id.in_(cart_session.keys())).all()
-        for p in products:
-            qty = cart_session[str(p.id)]
-            item_total = p.gia * qty
-            total_price += item_total
-            
-           
-            cart_list.append({
-                'product': p,     
-                'quantity': qty,
-                'total_price': item_total
-            })
-            
-    # Trả về cục dữ liệu JSON
-    return {
-        'cart': cart_list,
-        'total': total_price,
-        'cart_session': cart_session # Để biết món nào đang được chọn (ID và SL)
-    }
-
-@app.route('/api/pos/update', methods=['POST'])
-def api_pos_update():
-    data = request.json # Nhận dữ liệu từ JS gửi lên
-    p_id = str(data.get('product_id'))
-    action = data.get('action') # 'add', 'increase', 'decrease', 'remove'
-    
-    cart = session.get('pos_cart', {})
-    
-    if action == 'add':
-        if p_id in cart: cart[p_id] += 1
-        else: cart[p_id] = 1
-        
-    elif action == 'increase':
-        if p_id in cart: cart[p_id] += 1
-        
-    elif action == 'decrease':
-        if p_id in cart:
-            cart[p_id] -= 1
-            if cart[p_id] < 1: del cart[p_id]
-            
-    elif action == 'remove':
-        if p_id in cart: del cart[p_id]
-        
-    elif action == 'clear':
-        cart = {}
-
-    session['pos_cart'] = cart
-    
-    # Trả về dữ liệu mới nhất để giao diện tự cập nhật
-    return jsonify(get_cart_data())
 
 @app.route("/admin")
 def admin_dashboard():
