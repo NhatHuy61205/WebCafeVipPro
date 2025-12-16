@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>POS - Bán Hàng</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { height: 100vh; overflow: hidden; background-color: #e9ecef; }
+        .product-card { height: 110px; transition: 0.2s; border: 2px solid transparent; cursor: pointer; }
+        .product-card:hover { border-color: #ccc; }
+        .product-active { background-color: #fff3cd !important; border-color: #ffc107 !important; }
+        .hidden { display: none !important; }
+        .scrollable-list { height: calc(100vh - 180px); overflow-y: auto; }
+        .cart-area { height: 100vh; background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <div class="col-8 p-3 d-flex flex-column">
+                <div class="mb-3 d-flex gap-2">
+                    <button class="btn btn-dark fw-bold">TẤT CẢ</button>
+                    <button class="btn btn-outline-dark">CÀ PHÊ</button>
+                    <button class="btn btn-outline-dark">TRÀ SỮA</button>
+                    <button class="btn btn-outline-dark">TRÀ</button>
+                    <button class="btn btn-outline-dark">BÁNH NGỌT</button>
+                </div>
+
+                <div class="row row-cols-4 g-2 overflow-auto flex-grow-1 pb-5" style="align-content: flex-start;">
+                    {% for mon in items %}
+                    
+                    {% set quantity = cart_session.get(mon.id | string, 0) %}
+                    
+                    {% set is_active = 'product-active' if quantity > 0 else '' %}
+                    {% set show_controls = '' if quantity > 0 else 'hidden' %}
+                    {% set show_default = 'hidden' if quantity > 0 else '' %}
+
+                    <div class="col">
+                        <div id="card-{{ mon.id }}" 
+                             class="card h-100 product-card shadow-sm p-2 d-flex flex-column justify-content-between text-center {{ is_active }}"
+                             onclick="handleClickCard({{ mon.id }})">
+                            
+                            <div>
+                                <div class="fw-bold text-truncate">{{ mon.name }}</div>
+                                <div class="text-primary fw-bold small">{{ "{:,.0f}".format(mon.gia) }}</div>
+                            </div>
+
+                            <div id="default-{{ mon.id }}" class="mt-2 {{ show_default }}">
+                                <i class="fas fa-plus-circle text-muted opacity-25 fa-2x"></i>
+                            </div>
+
+                            <div id="controls-{{ mon.id }}" class="d-flex justify-content-center align-items-center gap-2 mt-1 {{ show_controls }}" onclick="event.stopPropagation()">
+                                <button class="btn btn-sm btn-outline-dark px-2" onclick="updateItem({{ mon.id }}, 'decrease')">
+                                    <i class="fas fa-minus"></i>
+                                </button>
+                                <span id="qty-{{ mon.id }}" class="fw-bold fs-5">{{ quantity }}</span>
+                                <button class="btn btn-sm btn-outline-dark px-2" onclick="updateItem({{ mon.id }}, 'increase')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="col-4 cart-area p-0 shadow-lg">
+                <div class="p-3 bg-white border-bottom shadow-sm z-1">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="fw-bold m-0"><i class="fas fa-receipt me-2"></i>Đơn hàng</h4>
+                            <small class="text-muted">NV: {{ session.get('user_name') }}</small>
+                        </div>
+                        <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger">Đăng xuất</a>
+                    </div>
+                </div>
+
+                <div id="cart-list" class="flex-grow-1 p-2 overflow-auto bg-light">
+                    </div>
+
+                <div class="p-3 border-top bg-white z-1">
+                    <div class="d-flex justify-content-between fs-4 fw-bold mb-3">
+                        <span>Tổng tiền:</span>
+                        <span id="total-price" class="text-danger">0đ</span>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <button class="btn btn-danger w-100 py-3 fw-bold h-100" onclick="updateItem(0, 'clear')">HỦY</button>
+                        </div>
+                        <div class="col-8">
+                            <button class="btn btn-success w-100 py-3 fw-bold h-100 shadow">THANH TOÁN</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const initialData = {
+                cart: [
+                    {% for item in cart %}
+                    { id: {{ item.product.id }}, name: "{{ item['product_name'] }}", quantity: {{ item.quantity }}, total_price: {{ item.total_price }} },
+                    {% endfor %}
+                ],
+                total: {{ total }}
+            };
+            renderCart(initialData);
+        });
+
+        function handleClickCard(id) {
+            const card = document.getElementById(`card-${id}`);
+            if (!card.classList.contains('product-active')) {
+                updateItem(id, 'add');
+            }
+        }
+
+        function updateItem(id, action) {
+            fetch('/api/pos/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_id: id, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateGridUI(data.cart_session);
+                renderCart(data);
+            })
+            .catch(error => console.error('Lỗi:', error));
+        }
+
+        function updateGridUI(cartSession) {
+            document.querySelectorAll('.product-card').forEach(card => {
+                const id = card.id.replace('card-', '');
+                const qty = cartSession[id] || 0;
+                const defaultDiv = document.getElementById(`default-${id}`);
+                const controlsDiv = document.getElementById(`controls-${id}`);
+                const qtySpan = document.getElementById(`qty-${id}`);
+
+                if (qty > 0) {
+                    card.classList.add('product-active');
+                    defaultDiv.classList.add('hidden');
+                    controlsDiv.classList.remove('hidden');
+                    qtySpan.innerText = qty;
+                } else {
+                    card.classList.remove('product-active');
+                    defaultDiv.classList.remove('hidden');
+                    controlsDiv.classList.add('hidden');
+                }
+            });
+        }
+
+        function renderCart(data) {
+            const list = document.getElementById('cart-list');
+            const totalSpan = document.getElementById('total-price');
+            totalSpan.innerText = new Intl.NumberFormat('vi-VN').format(data.total) + 'đ';
+            list.innerHTML = '';
+            if (data.cart.length === 0) {
+                list.innerHTML = `<div class="text-center text-muted mt-5"><i class="fas fa-shopping-basket fa-3x mb-3 opacity-25"></i><p>Chưa có món nào</p></div>`;
+                return;
+            }
+            data.cart.forEach(item => {
+                const html = `
+                <div class="card border-0 shadow-sm mb-2">
+                    <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                        <div style="width: 40%">
+                            <div class="fw-bold text-truncate">${item.name}</div>
+                            <div class="text-muted small">${new Intl.NumberFormat('vi-VN').format(item.total_price)}</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-1 bg-light rounded px-1">
+                            <button class="btn btn-sm btn-link text-dark" onclick="updateItem(${item.id}, 'decrease')"><i class="fas fa-minus small"></i></button>
+                            <span class="fw-bold small mx-1">${item.quantity}</span>
+                            <button class="btn btn-sm btn-link text-dark" onclick="updateItem(${item.id}, 'increase')"><i class="fas fa-plus small"></i></button>
+                        </div>
+                        <button class="btn btn-sm text-danger" onclick="updateItem(${item.id}, 'remove')"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>`;
+                list.insertAdjacentHTML('beforeend', html);
+            });
+        }
+    </script>
+</body>
+</html>

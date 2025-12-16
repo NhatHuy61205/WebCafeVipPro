@@ -1,0 +1,63 @@
+{% extends "layout/base.html" %}
+
+{% block title %}Trang Quản Trị - Admin{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="list-group shadow-sm">
+            <a href="#" class="list-group-item list-group-item-action active fw-bold">
+                <i class="fas fa-tachometer-alt me-2"></i> Tổng quan
+            </a>
+            <a href="#" class="list-group-item list-group-item-action">
+                <i class="fas fa-boxes me-2"></i> Kho Nguyên Liệu
+            </a>
+            <a href="#" class="list-group-item list-group-item-action">
+                <i class="fas fa-file-import me-2"></i> Tạo Phiếu Nhập
+            </a>
+            <a href="#" class="list-group-item list-group-item-action">
+                <i class="fas fa-chart-line me-2"></i> Báo cáo doanh thu
+            </a>
+            <a href="{{ url_for('logout') }}" class="list-group-item list-group-item-action text-danger">
+                <i class="fas fa-sign-out-alt me-2"></i> Đăng xuất
+            </a>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body text-center py-5">
+                <h2 class="text-uppercase fw-bold text-secondary">Hệ thống quản lý Cafe</h2>
+                <p class="text-muted">Chào mừng quản lý <strong>{{ session.get('user_name') }}</strong> quay trở lại.</p>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card text-white bg-primary h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Doanh thu hôm nay</h5>
+                        <h3 class="fw-bold">1.250.000đ</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-warning h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Nguyên liệu sắp hết</h5>
+                        <h3 class="fw-bold">3 loại</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-success h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Đơn hàng mới</h5>
+                        <h3 class="fw-bold">12 đơn</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
