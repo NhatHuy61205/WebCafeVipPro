@@ -1,0 +1,74 @@
+{% extends "layout/base.html" %}
+
+{% block title %}
+Thanh toán hóa đơn
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="row g-4 align-items-center">
+
+        <!-- QR -->
+        <div class="col-md-5 text-center">
+          <img src="{{ qr_url }}"
+               alt="VietQR"
+               class="img-fluid border rounded"
+               style="max-width: 320px;">
+        </div>
+
+        <!-- Thông tin thanh toán -->
+        <div class="col-md-7">
+          <h5 class="fw-bold mb-3">
+            Chuyển khoản ngân hàng – Thanh toán QR
+          </h5>
+
+          <div class="mb-2">
+            <span class="text-muted">Số tiền cần thanh toán:</span>
+            <span class="fw-bold text-danger fs-5">
+              {{ "{:,.0f}".format(hoa_don.tongThanhToan) }}đ
+            </span>
+          </div>
+
+          <div class="mb-3">
+            <span class="text-muted">Nội dung chuyển khoản:</span>
+            <span class="fw-bold text-primary">
+              {{ hoa_don.maThamChieu }}
+            </span>
+          </div>
+
+          <div class="alert alert-warning small">
+            <b>Lưu ý:</b> Không thay đổi nội dung chuyển khoản.
+            Việc sửa nội dung có thể khiến hệ thống không tự động xác nhận thanh toán.
+          </div>
+
+          <ol class="mb-0">
+            <li>Mở ứng dụng Mobile Banking</li>
+            <li>Chọn <b>Thanh toán / Quét QR</b></li>
+            <li>Giữ nguyên thông tin và xác nhận chuyển tiền</li>
+            <li>Vui lòng chờ hệ thống xử lý trong giây lát</li>
+          </ol>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tự động kiểm tra trạng thái thanh toán -->
+<script>
+setInterval(async () => {
+    try {
+        const res = await fetch("/payment/status/{{ hoa_don.id }}");
+        const data = await res.json();
+
+        if (data.status === "DA_THANH_TOAN") {
+            window.location.href = "/payment/success/{{ hoa_don.id }}";
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}, 2000);
+</script>
+{% endblock %}

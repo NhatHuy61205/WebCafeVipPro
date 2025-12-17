@@ -1,20 +1,127 @@
 {% extends "layout/base.html" %}
 
-{% block title %}Trang Chủ{% endblock %}
+{% block title %}Trang Chủ - Cafe Vip Pro {% endblock %}
 
 {% block content %}
-<div class="text-center py-5">
-    <h1 class="display-4 fw-bold">Chào mừng đến với Cafe Vip Pro!</h1>
-    <p class="lead text-muted mb-4">Trải nghiệm đặt món online siêu tốc, phục vụ tận tình.</p>
-    
-    <a href="{{ url_for('menu') }}" class="btn btn-primary btn-lg rounded-pill px-5 shadow">
-        <i class="fas fa-utensils me-2"></i> ĐẶT MÓN NGAY
-    </a>
 
-    <div class="mt-5">
-        <img src="https://source.unsplash.com/random/800x400/?coffee,shop" 
-             class="img-fluid rounded shadow" alt="Cafe Banner"
-             onerror="this.style.display='none'">
+<div id="heroCarousel" class="carousel slide shadow rounded-4 overflow-hidden mb-5" data-bs-ride="carousel">
+    <div class="carousel-indicators">
+        <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="0" class="active"></button>
+        <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="1"></button>
+    </div>
+    <div class="carousel-inner">
+        <div class="carousel-item active" data-bs-interval="3000">
+            <img src="https://images.unsplash.com/photo-1497935586351-b67a49e012bf?ixlib=rb-1.2.1&auto=format&fit=crop&w=1600&h=600&q=80" class="d-block w-100" alt="Banner 1" style="height: 500px; object-fit: cover;">
+            <div class="carousel-caption d-none d-md-block bg-dark bg-opacity-50 rounded p-3">
+                <h2 class="fw-bold bg-dark">HƯƠNG VỊ NGUYÊN BẢN</h2>
+                <p>Đậm đà hương vị cà phê rang xay tại chỗ.</p>
+                <a href="{{ url_for('menu') }}" class="btn btn-success fw-bold rounded-pill">ĐẶT NGAY</a>
+            </div>
+        </div>
+        <div class="carousel-item" data-bs-interval="3000">
+            <img src="https://images.unsplash.com/photo-1544148103-0773bf10d330?ixlib=rb-1.2.1&auto=format&fit=crop&w=1600&h=600&q=80" class="d-block w-100" alt="Banner 2" style="height: 500px; object-fit: cover;">
+            <div class="carousel-caption d-none d-md-block bg-dark bg-opacity-50 rounded p-3">
+                <h2 class="fw-bold text-white">TRÀ SỮA ĐẬM VỊ</h2>
+                <p>Kết hợp hoàn hảo giữa trà hảo hạng và sữa thơm ngon.</p>
+                <a href="{{ url_for('menu') }}" class="btn btn-light text-success fw-bold rounded-pill">XEM MENU</a>
+            </div>
+        </div>
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#heroCarousel" data-bs-slide="prev">
+        <span class="carousel-control-prev-icon"></span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#heroCarousel" data-bs-slide="next">
+        <span class="carousel-control-next-icon"></span>
+    </button>
+</div>
+
+<div class="container mb-5 text-center">
+    <h3 class="fw-bold text-uppercase bg-dark mb-4">Danh Mục Món</h3>
+    <div class="row justify-content-center g-4">
+        <div class="col-6 col-md-2">
+            <div class="p-3 bg-white shadow-sm rounded-circle d-inline-block border border-success border-2 category-hover">
+                <i class="fas fa-coffee fa-3x bg-dark"></i>
+            </div>
+            <h6 class="mt-2 fw-bold">Cà Phê</h6>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="p-3 bg-white shadow-sm rounded-circle d-inline-block border border-success border-2 category-hover">
+                <i class="fas fa-leaf fa-3x bg-dark"></i>
+            </div>
+            <h6 class="mt-2 fw-bold">Trà Sữa</h6>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="p-3 bg-white shadow-sm rounded-circle d-inline-block border border-success border-2 category-hover">
+                <i class="fas fa-mug-hot fa-3x bg-dark"></i>
+            </div>
+            <h6 class="mt-2 fw-bold">Trà</h6>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="p-3 bg-white shadow-sm rounded-circle d-inline-block border border-success border-2 category-hover">
+                <i class="fas fa-birthday-cake fa-3x bg-dark"></i>
+            </div>
+            <h6 class="mt-2 fw-bold">Bánh Ngọt</h6>
+        </div>
     </div>
 </div>
+
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-success pb-2">
+        <h3 class="fw-bold text-dark m-0">SẢN PHẨM NỔI BẬT</h3>
+        <a href="{{ url_for('menu') }}" class="bg-dark text-decoration-none fw-bold">Xem tất cả <i class="fas fa-arrow-right"></i></a>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-4 g-4">
+        {% for mon in items %}
+        <div class="col">
+            <div class="card h-100 border-0 shadow-sm product-hover">
+                <div class="position-relative overflow-hidden">
+                    <img src="{{ url_for('static', filename='img/' + mon.image) }}"
+                         class="card-img-top" alt="{{ mon.name }}"
+                         style="height: 250px; object-fit: cover;"
+                         onerror="this.src='https://via.placeholder.com/300x250?text=No+Image'">
+                </div>
+                <div class="card-body text-center">
+                    <h5 class="fw-bold bg-dark">{{ mon.name }}</h5>
+                    <p class="fw-bold text-dark fs-5">{{ "{:,.0f}".format(mon.gia) }}đ</p>
+                    <a href="{{ url_for('menu') }}" class="btn btn-outline-success rounded-pill w-100 fw-bold">ĐI ĐẾN GIỎ HÀNG</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="container-fluid bg-success bg-gradient text-white py-5 mb-5">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-6 text-center text-md-start">
+                <h2 class="fw-bold display-5">TRỞ THÀNH HỘI VIÊN VIP</h2>
+                <p class="fs-5">Đăng ký ngay để tích điểm, nhận ưu đãi sinh nhật và giảm giá 10% trọn đời.</p>
+                <div class="d-flex gap-3 justify-content-center justify-content-md-start">
+                    <a href="{{ url_for('register') }}" class="btn btn-light bg-success fw-bold px-4 py-2 rounded-pill shadow">
+                        <i class="fas fa-user-plus"></i> ĐĂNG KÝ NGAY
+                    </a>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-light fw-bold px-4 py-2 rounded-pill">
+                        ĐĂNG NHẬP
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 text-center d-none d-md-block">
+                <i class="fas fa-gifts fa-10x opacity-50"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Hiệu ứng hover cho icon danh mục */
+    .category-hover { transition: transform 0.3s; cursor: pointer; }
+    .category-hover:hover { transform: translateY(-5px); background-color: #f0fff4 !important; }
+
+    /* Hiệu ứng hover cho sản phẩm */
+    .product-hover { transition: 0.3s; }
+    .product-hover:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important; }
+</style>
+
 {% endblock %}

@@ -14,30 +14,70 @@
     </style>
 </head>
 <body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm py-3">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-success fs-3" href="{{ url_for('index') }}">
+            <i class="fas fa-leaf"></i> CAFE VIP PRO
+        </a>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow">
-        <div class="container">
-            <a class="navbar-brand fw-bold text-warning" href="{{ url_for('index') }}">
-                <i class="fas fa-mug-hot"></i> VIP PRO CAFE
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+
+            <form class="d-flex mx-auto my-2 my-lg-0 w-50" action="{{ url_for('menu') }}" method="GET">
+                <div class="input-group">
+                    <input class="form-control border-success rounded-start-pill" type="search" name="q" placeholder="Bạn muốn tìm món gì? (VD: Trà đào)" aria-label="Search">
+                    <button class="btn btn-success rounded-end-pill px-4" type="submit">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+
+            <ul class="navbar-nav ms-auto align-items-center gap-2">
+                <li class="nav-item">
+                    <a class="nav-link fw-bold text-dark" href="{{ url_for('menu') }}">THỰC ĐƠN</a>
+                </li>
+
+                <li class="nav-item me-2">
+                    <a class="nav-link position-relative" href="{{ url_for('menu') }}">
+                        <i class="fas fa-shopping-bag fa-lg text-success"></i>
+                        {% if session.get('cart') %}
+                        <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle">
+                            <span class="visually-hidden">New alerts</span>
+                        </span>
+                        {% endif %}
+                    </a>
+                </li>
+
+                {% if session.get('user_id') %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle btn btn-light rounded-pill px-3" href="#" data-bs-toggle="dropdown">
+                            <i class="fas fa-user text-success me-1"></i> {{ session.get('user_name') }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                            {% if session.get('role') == 'NHAN_VIEN' %}
+                                <li><a class="dropdown-item" href="{{ url_for('pos_page') }}">Vào bán hàng (POS)</a></li>
+                            {% elif session.get('role') in ['QUAN_LY_CUA_HANG', 'QUAN_LY_KHO'] %}
+                                <a class="dropdown-item" href="/admin">Trang quản trị</a>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">Đăng xuất</a></li>
+                        </ul>
+                    </li>
+                {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('index') }}">Trang chủ</a>
+                        <a class="btn btn-outline-success rounded-pill px-3" href="{{ url_for('login') }}">Đăng nhập</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('menu') }}">Đặt món</a>
+                        <a class="btn btn-success rounded-pill px-3 shadow-sm" href="{{ url_for('register') }}">Đăng ký hội viên</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('login') }}">Đăng nhập</a>
-                    </li>
-                </ul>
-            </div>
+                {% endif %}
+            </ul>
         </div>
-    </nav>
+    </div>
+</nav>
 
     <div class="container py-4">
         {% block content %}

@@ -1,0 +1,62 @@
+{% extends "layout/base.html" %}
+
+{% block title %}Đăng Ký Thành Viên{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="col-md-5">
+        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="card-header bg-success text-white text-center py-4">
+                <h3 class="fw-bold mb-0">ĐĂNG KÝ TÀI KHOẢN</h3>
+                <p class="mb-0 opacity-75">Trở thành thành viên VIP ngay hôm nay</p>
+            </div>
+            
+            <div class="card-body p-5 bg-white">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} mb-4 rounded-3 text-center small fw-bold">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form action="{{ url_for('register') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-secondary">Họ và tên</label>
+                        <input type="text" name="name" class="form-control bg-light border-0 py-2" placeholder="Ví dụ: Nguyễn Văn A" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-secondary">Tên đăng nhập</label>
+                        <input type="text" name="username" class="form-control bg-light border-0 py-2" placeholder="Viết liền không dấu" required>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-bold text-secondary">Mật khẩu</label>
+                            <input type="password" name="password" class="form-control bg-light border-0 py-2" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold text-secondary">Nhập lại mật khẩu</label>
+                            <input type="password" name="confirm_password" class="form-control bg-light border-0 py-2" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-success btn-lg rounded-pill fw-bold shadow-sm">
+                            ĐĂNG KÝ NGAY
+                        </button>
+                    </div>
+                </form>
+
+                <div class="text-center mt-4 pt-3 border-top">
+                    <p class="text-muted small">Bạn đã có tài khoản?</p>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-success btn-sm rounded-pill px-4 fw-bold">Đăng nhập</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

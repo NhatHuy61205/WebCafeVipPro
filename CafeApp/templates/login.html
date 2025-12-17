@@ -1,0 +1,51 @@
+{% extends "layout/base.html" %}
+
+{% block title %}Đăng Nhập{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 60vh;">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-lg">
+            <div class="card-body p-5">
+                <h3 class="text-center fw-bold mb-4">ĐĂNG NHẬP</h3>
+
+                <form method="post" action="{{ url_for('login') }}">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tài khoản</label>
+                        <input
+                                type="text"
+                                name="username"
+                                class="form-control bg-light"
+                                placeholder="Nhập tên đăng nhập"
+                                required
+                        >
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Mật khẩu</label>
+                        <input
+                                type="password"
+                                name="password"
+                                class="form-control bg-light"
+                                placeholder="Nhập mật khẩu"
+                                required
+                        >
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2">
+                        VÀO HỆ THỐNG
+                    </button>
+                </form>
+                   {% if err_msg %}
+                <div class="alert alert-danger text-center mb-3">
+                    {{ err_msg }}
+                </div>
+                {% endif %}
+                <div class="text-center mt-3 small">
+                    <a href="#" class="text-muted">Quên mật khẩu?</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

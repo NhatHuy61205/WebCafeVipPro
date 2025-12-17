@@ -1,0 +1,269 @@
+{% extends "layout/base.html" %}
+
+{% block title %}Thực Đơn{% endblock %}
+
+{% block content %}
+<style>
+  /* Cart should NOT stick while scrolling page */
+  .cart-card { position: static !important; top: auto !important; }
+
+  /* Only scroll inside the item list (when too many items) */
+  .cart-items-scroll {
+    max-height: 260px;            /* chỉnh cao thấp tuỳ bạn */
+    overflow-y: auto;
+    padding-right: .25rem;
+  }
+</style>
+
+<div class="row">
+  <div class="col-lg-8 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 class="fw-bold m-0">THỰC ĐƠN HÔM NAY</h3>
+      <div class="btn-group">
+        <button class="btn btn-dark active" type="button">Tất cả</button>
+        <button class="btn btn-outline-dark" type="button">Cà phê</button>
+        <button class="btn btn-outline-dark" type="button">Trà sữa</button>
+      </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+      {% for mon in items %}
+      <div class="col">
+        <div class="card h-100 border-0 shadow-sm">
+          <img src="{{ url_for('static', filename='img/' + mon.image) }}"
+               class="card-img-top" alt="{{ mon.name }}"
+               onerror="this.src='https://via.placeholder.com/300x200?text=No+Image'">
+
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title fw-bold">{{ mon.name }}</h5>
+            <p class="small text-muted mb-2 flex-grow-1">{{ mon.moTa or 'Hương vị tuyệt hảo' }}</p>
+
+            <div class="d-flex justify-content-between align-items-center mt-auto">
+              <span class="fw-bold text-primary">{{ "{:,.0f}".format(mon.gia) }}đ</span>
+
+              {# Khi đang checkout thì KHÔNG cho thêm món nữa #}
+              {% if show_checkout %}
+                <button class="btn btn-sm btn-outline-secondary rounded-pill" type="button" disabled>
+                  <i class="fas fa-plus"></i> Thêm
+                </button>
+              {% else %}
+                {% if mon.loaiMon == LoaiMonEnum.NUOC %}
+                  <a class="btn btn-sm btn-outline-primary rounded-pill"
+                     href="{{ url_for('drink_config', mon_id=mon.id) }}">
+                    <i class="fas fa-plus"></i> Thêm
+                  </a>
+                {% else %}
+                  <form action="{{ url_for('cart_add') }}" method="post" class="m-0">
+                    <input type="hidden" name="mon_id" value="{{ mon.id }}">
+                    <input type="hidden" name="quantity" value="1">
+                    <button class="btn btn-sm btn-outline-primary rounded-pill" type="submit">
+                      <i class="fas fa-plus"></i> Thêm
+                    </button>
+                  </form>
+                {% endif %}
+              {% endif %}
+
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if not items %}
+      <p class="text-danger">Chưa có món nào được thêm vào Menu.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-0 shadow cart-card">
+      <div class="card-header bg-white fw-bold border-bottom-0">
+        <i class="fas fa-shopping-cart me-2"></i> GIỎ HÀNG CỦA BẠN
+      </div>
+
+      <div class="card-body bg-light">
+        <div class="bg-white p-3 rounded border">
+          {% if cart and cart|length > 0 %}
+
+            <div class="cart-items-scroll vstack gap-3">
+              {% for key, item in cart.items() %}
+                <div class="d-flex justify-content-between align-items-start">
+                  {# ====== LEFT: item info (click to edit if drink + NOT checkout) ====== #}
+                  {% set is_drink = (item.options is not none and item.options.desc) %}
+
+                  {% if (not show_checkout) and is_drink %}
+                    <a href="{{ url_for('drink_config', mon_id=item.id, edit_key=key) }}"
+                       class="text-decoration-none text-dark me-2"
+                       style="min-width: 0;">
+                      <div class="fw-semibold">{{ item.name }}</div>
+
+                      {% if item.options and item.options.desc %}
+                        <div class="small text-muted">
+                          {{ item.options.desc | join(" • ") }}
+                        </div>
+                      {% endif %}
+
+                      {% if item.options and item.options.note %}
+                        <div class="small text-muted fst-italic">
+                          Ghi chú: {{ item.options.note }}
+                        </div>
+                      {% endif %}
+
+                      <div class="small text-muted">{{ "{:,.0f}".format(item.price) }}đ</div>
+                    </a>
+                  {% else %}
+                    <div class="me-2" style="min-width: 0;">
+                      <div class="fw-semibold">{{ item.name }}</div>
+
+                      {% if item.options and item.options.desc %}
+                        <div class="small text-muted">
+                          {{ item.options.desc | join(" • ") }}
+                        </div>
+                      {% endif %}
+
+                      {% if item.options and item.options.note %}
+                        <div class="small text-muted fst-italic">
+                          Ghi chú: {{ item.options.note }}
+                        </div>
+                      {% endif %}
+
+                      <div class="small text-muted">{{ "{:,.0f}".format(item.price) }}đ</div>
+                    </div>
+                  {% endif %}
+
+                  {# ====== RIGHT: quantity controls ====== #}
+                  {% if show_checkout %}
+                    <span class="badge bg-light text-dark border rounded px-3 py-2">SL: {{ item.quantity }}</span>
+                  {% else %}
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="input-group input-group-sm shadow-sm"
+                           style="width: 117px; border: 1.5px solid #ced4da; border-radius: 10px; overflow: hidden; background-color:#fff;">
+                        <!-- Giảm -->
+                        <form action="{{ url_for('cart_dec') }}" method="post" class="m-0">
+                          <input type="hidden" name="mon_id" value="{{ key }}">
+                          <button class="btn btn-light fw-bold border-0 px-2" type="submit" style="height:36px;">−</button>
+                        </form>
+
+                        <!-- NHẬP SỐ + ENTER -->
+                        <form action="{{ url_for('cart_update') }}" method="post" class="m-0 d-flex">
+                          <input type="hidden" name="mon_id" value="{{ key }}">
+                          <input type="text"
+                                 name="quantity"
+                                 inputmode="numeric"
+                                 pattern="[0-9]*"
+                                 class="form-control text-center fw-semibold border-0"
+                                 value="{{ item.quantity }}"
+                                 style="height:36px; width:60px; background-color:#f8f9fa;"
+                                 title="Nhập số lượng rồi nhấn Enter">
+                        </form>
+
+                        <!-- Tăng -->
+                        <form action="{{ url_for('cart_inc') }}" method="post" class="m-0">
+                          <input type="hidden" name="mon_id" value="{{ key }}">
+                          <button class="btn btn-light fw-bold border-0 px-2" type="submit" style="height:36px;">+</button>
+                        </form>
+                      </div>
+
+                      <form action="{{ url_for('cart_remove') }}" method="post" class="m-0">
+                        <input type="hidden" name="mon_id" value="{{ key }}">
+                        <button class="btn btn-sm btn-danger" style="height:36px; width:36px;" type="submit">×</button>
+                      </form>
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-between">
+              <span class="fw-bold">Tổng SL</span>
+              <span>{{ total_qty }}</span>
+            </div>
+            <div class="d-flex justify-content-between">
+              <span class="fw-bold">Tổng tiền</span>
+              <span class="text-primary fw-bold">{{ "{:,.0f}".format(total_amount) }}đ</span>
+            </div>
+
+            <hr>
+
+            {# ====== Checkout area ====== #}
+            {% if show_checkout %}
+              <div class="fw-bold fs-5 mb-2">Thông tin khách hàng</div>
+
+              <form action="{{ url_for('checkout') }}" method="post" class="vstack gap-3">
+                <div>
+                  <label class="form-label mb-1">Tên</label>
+                  <input type="text" name="name" class="form-control"
+                         value="{{ checkout_form.name }}"
+                         {% if errors.get('name') %}autofocus{% endif %}>
+                  {% if errors.get('name') %}<div class="text-danger small mt-1">{{ errors.get('name') }}</div>{% endif %}
+                </div>
+
+                <div>
+                  <label class="form-label mb-1">Số điện thoại</label>
+                  <input type="text" name="phone" class="form-control"
+                         inputmode="numeric" pattern="[0-9]*"
+                         value="{{ checkout_form.phone }}"
+                         {% if errors.get('phone') %}autofocus{% endif %}>
+                  {% if errors.get('phone') %}<div class="text-danger small mt-1">{{ errors.get('phone') }}</div>{% endif %}
+                </div>
+
+                <div>
+                  <label class="form-label mb-1">Địa chỉ</label>
+                  <input type="text" name="address" class="form-control"
+                         value="{{ checkout_form.address }}"
+                         {% if errors.get('address') %}autofocus{% endif %}>
+                  {% if errors.get('address') %}<div class="text-danger small mt-1">{{ errors.get('address') }}</div>{% endif %}
+                </div>
+
+                <div class="border rounded p-3 bg-light">
+                  <div class="d-flex justify-content-between">
+                    <span>Tổng cộng:</span>
+                    <span class="fw-semibold">{{ "{:,.0f}".format(total_amount) }}đ</span>
+                  </div>
+                  <div class="d-flex justify-content-between">
+                    <span>Phí phục vụ (5%):</span>
+                    <span class="fw-semibold">{{ "{:,.0f}".format(service_fee) }}đ</span>
+                  </div>
+                  <div class="d-flex justify-content-between mt-1">
+                    <span class="fw-bold">Tổng thanh toán:</span>
+                    <span class="fw-bold text-primary">{{ "{:,.0f}".format(grand_total) }}đ</span>
+                  </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                  <button class="btn btn-success flex-fill fw-bold" type="submit">Xác nhận</button>
+                  <button class="btn btn-outline-secondary flex-fill"
+                          type="submit"
+                          formaction="{{ url_for('checkout_cancel') }}"
+                          formmethod="post">
+                    Quay lại
+                  </button>
+                </div>
+              </form>
+
+            {% else %}
+              <div class="d-flex gap-2 mt-2">
+                <form action="{{ url_for('checkout_start') }}" method="post" class="m-0 flex-fill">
+                  <button class="btn btn-primary w-100 fw-bold" type="submit">Thanh toán</button>
+                </form>
+
+                <form action="{{ url_for('cart_clear') }}" method="post" class="m-0">
+                  <button class="btn btn-outline-danger fw-bold"
+                          type="submit"
+                          onclick="return confirm('Bạn chắc chắn muốn hủy đơn hàng?');">
+                    Hủy
+                  </button>
+                </form>
+              </div>
+            {% endif %}
+
+          {% else %}
+            <div class="text-muted">Chưa có món nào trong giỏ.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

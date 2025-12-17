@@ -1,6 +1,26 @@
-from flask import Flask, render_template
-from CafeApp import app
-from CafeApp.models import Mon
+import datetime
+import re
+from functools import wraps
+import urllib.parse
+from flask_login import LoginManager, login_user, current_user, login_required, logout_user
+
+from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang
+from CafeApp.models import LoaiDungEnum, TrangThaiHoaDonEnum, SizeEnum
+from CafeApp.models import LoaiMonEnum
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash
+from CafeApp import app, db, BANK_ACQ_ID, BANK_ACCOUNT_NO, BANK_ACCOUNT_NAME, dao, login
+from CafeApp.dao import build_drink
+from urllib.parse import quote, unquote
+
+
+def block_when_checkout(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if session.get("checkout_mode"):
+            return redirect(url_for("menu"))
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 @app.route("/")
@@ -9,18 +29,288 @@ def index():
     return render_template("index.html", items=ds_mon)
 
 
-@app.route("/login")
-def login():
-    return render_template("layout/login.html")
+@app.route("/login", methods=["GET", "POST"], endpoint="login")
+def login_my_user():
+    print("== HIT /login ==", request.method)  # <-- thêm
+    if request.method == "POST":
+        print("FORM =", dict(request.form))    # <-- thêm
 
+    if current_user.is_authenticated:
+        role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+        print("ALREADY AUTH, role =", role_str)  # <-- thêm
+        if role_str == "NHAN_VIEN":
+            return redirect(url_for("pos_page"))
+        elif role_str in ["QUAN_LY_CUA_HANG", "QUAN_LY_KHO"]:
+            return redirect(url_for("admin_dashboard"))
+        return redirect("/")
+
+    err_msg = None
+
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+
+        user = dao.auth_user(username, password)
+        print("AUTH USER =", bool(user))        # <-- thêm
+
+        if user:
+            login_user(user)
+            print("LOGIN_USER DONE. current_user.auth =", current_user.is_authenticated)  # <-- thêm
+
+            role_str = user.role.value if hasattr(user.role, "value") else user.role
+            session["role"] = role_str
+            print("SET session role =", session.get("role"))  # <-- thêm
+
+            if role_str == "NHAN_VIEN":
+                return redirect(url_for("pos_page"))
+            elif role_str in ["QUAN_LY_CUA_HANG", "QUAN_LY_KHO"]:
+                return redirect(url_for("admin_dashboard"))
+            else:
+                err_msg = "Tài khoản không có quyền truy cập!"
+        else:
+            err_msg = "Tài khoản hoặc mật khẩu không đúng!"
+
+    return render_template("login.html", err_msg=err_msg)
+
+
+@app.route("/admin-login", methods=["POST"])
+def admin_login_process():
+    username = request.form.get("username")
+    password = request.form.get("password")
+
+    user = dao.auth_user(username, password)
+
+    if user:
+        role_str = user.role.value if hasattr(user.role, "value") else user.role
+        if role_str not in ["QUAN_LY_CUA_HANG", "QUAN_LY_KHO"]:
+            flash("Bạn không có quyền truy cập Admin!", "danger")
+            return redirect(url_for("login_my_user"))
+
+        login_user(user)
+        session["role"] = role_str
+        return redirect(url_for("admin_dashboard"))
+
+    flash("Tài khoản hoặc mật khẩu không đúng!", "danger")
+    return redirect(url_for("login_my_user"))
+
+
+from flask_login import login_required
+
+@app.route("/logout", endpoint="logout")
+@login_required
+def logout():
+    logout_user()
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/drink/<int:mon_id>", methods=["GET", "POST"])
+def drink_config(mon_id):
+    mon = Mon.query.get_or_404(mon_id)
+
+    if mon.loaiMon != LoaiMonEnum.NUOC:
+        return redirect(url_for("menu"))
+
+    SIZE_OPTS = [("S", "Nhỏ", 0), ("M", "Vừa", 5000), ("L", "Lớn", 10000)]
+    SUGAR_OPTS = [("0", "0%"), ("30", "30%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
+    ICE_OPTS = [("0", "0%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
+    TOPPING_OPTS = [
+        ("TRAN_CHAU", "Trân châu", 5000),
+        ("PUDDING", "Pudding", 7000),
+        ("KEM_CHEESE", "Kem cheese", 10000)
+    ]
+
+    # ====== GET ======
+    if request.method == "GET":
+        cart = session.get("cart", {})
+        edit_key = (request.args.get("edit_key") or "").strip()
+
+        # mặc định
+        form = {
+            "size": "S",
+            "duong": "70",
+            "da": "70",
+            "topping": [],
+            "note": "",
+            "quantity": "1"
+        }
+
+
+        if edit_key and edit_key in cart:
+            old = cart.get(edit_key, {})
+            opts = old.get("options", {}) or {}
+
+            form = {
+                "size": (opts.get("size") or "S"),
+                "duong": str(opts.get("duong") or "70"),
+                "da": str(opts.get("da") or "70"),
+                "topping": opts.get("topping") or [],
+                "note": opts.get("note") or "",
+                "quantity": str(old.get("quantity") or 1)
+            }
+
+        unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
+        try:
+            qty = int(form["quantity"])
+        except:
+            qty = 1
+        total_price = unit_price * max(qty, 1)
+
+        return render_template(
+            "drink_modal.html",
+            mon=mon,
+            form=form,
+            errors={},
+            unit_price=unit_price,
+            total_price=total_price,
+            desc_list=desc_list,
+            SIZE_OPTS=SIZE_OPTS,
+            SUGAR_OPTS=SUGAR_OPTS,
+            ICE_OPTS=ICE_OPTS,
+            TOPPING_OPTS=TOPPING_OPTS,
+            edit_key=edit_key or None
+        )
+
+    # ====== POST ======
+    size = (request.form.get("size") or "S").strip()
+    duong = (request.form.get("duong") or "70").strip()
+    da = (request.form.get("da") or "70").strip()
+    topping = request.form.getlist("topping")
+    note = (request.form.get("note") or "").strip()
+    qty_raw = (request.form.get("quantity") or "1").strip()
+    edit_key = (request.form.get("edit_key") or "").strip()
+
+    errors = {}
+    try:
+        qty = int(qty_raw)
+        if qty < 1:
+            raise ValueError()
+    except:
+        errors["quantity"] = "Số lượng không hợp lệ."
+        qty = 1
+
+    unit_price, desc_list = build_drink(mon, size, duong, da, topping)
+    total_price = unit_price * qty
+
+    action = (request.form.get("action") or "").strip()
+    if action != "add" or errors:
+        form = {
+            "size": size,
+            "duong": duong,
+            "da": da,
+            "topping": topping,
+            "note": note,
+            "quantity": qty_raw
+        }
+        return render_template(
+            "drink_modal.html",
+            mon=mon,
+            form=form,
+            errors=errors,
+            unit_price=unit_price,
+            total_price=total_price,
+            desc_list=desc_list,
+            SIZE_OPTS=SIZE_OPTS,
+            SUGAR_OPTS=SUGAR_OPTS,
+            ICE_OPTS=ICE_OPTS,
+            TOPPING_OPTS=TOPPING_OPTS,
+            edit_key=edit_key or None
+        )
+
+    option_key = f"{mon.id}|{size}|{duong}|{da}|{','.join(sorted(topping))}|{note}"
+
+    cart = session.get("cart", {})
+
+    effective_len = len(cart) - (1 if (edit_key and edit_key in cart) else 0)
+    if option_key not in cart and effective_len >= MAX_CART_ITEMS:
+        return redirect(url_for("menu"))
+
+    if edit_key and edit_key in cart:
+        cart.pop(edit_key, None)
+
+    if option_key not in cart:
+        cart[option_key] = {
+            "id": mon.id,
+            "name": mon.name,
+            "price": unit_price,
+            "quantity": 0,
+            "options": {
+                "size": size,
+                "duong": duong,
+                "da": da,
+                "topping": topping,
+                "note": note,
+                "desc": desc_list
+            }
+        }
+
+    cart[option_key]["quantity"] += qty
+
+    session["cart"] = cart
+    session.modified = True
+    return redirect(url_for("menu"))
+
+
+@app.route("/drink/edit/<path:cart_key>", methods=["GET"])
+def drink_edit(cart_key):
+    cart = get_cart()
+    cart_key = unquote(cart_key)
+
+    if cart_key not in cart:
+        return redirect(url_for("menu"))
+
+    item = cart[cart_key]
+    mon = Mon.query.get_or_404(item["id"])
+
+    # chỉ edit món nước
+    if mon.loaiMon != LoaiMonEnum.NUOC:
+        return redirect(url_for("menu"))
+
+    # form lấy từ options cũ
+    opt = item.get("options", {})
+    form = {
+        "size": opt.get("size", "S"),
+        "duong": opt.get("duong", "70"),
+        "da": opt.get("da", "70"),
+        "topping": opt.get("topping", []),
+        "note": opt.get("note", ""),
+        "quantity": str(item.get("quantity", 1))
+    }
+
+    unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
+    total_price = unit_price * int(form["quantity"] or 1)
+
+    # options list như bạn đang dùng
+    SIZE_OPTS = [("S", "Nhỏ", 0), ("M", "Vừa", 5000), ("L", "Lớn", 10000)]
+    SUGAR_OPTS = [("0", "0%"), ("30", "30%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
+    ICE_OPTS = [("0", "0%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
+    TOPPING_OPTS = [("TRAN_CHAU", "Trân châu", 5000),
+                    ("PUDDING", "Pudding", 7000),
+                    ("KEM_CHEESE", "Kem cheese", 10000)]
+
+    return render_template(
+        "drink_modal.html",
+        mon=mon,
+        form=form,
+        errors={},
+        unit_price=unit_price,
+        total_price=total_price,
+        desc_list=desc_list,
+        SIZE_OPTS=SIZE_OPTS,
+        SUGAR_OPTS=SUGAR_OPTS,
+        ICE_OPTS=ICE_OPTS,
+        TOPPING_OPTS=TOPPING_OPTS,
+        edit_key=cart_key
+    )
 
 
 def get_cart():
     return session.get("cart", {})
 
+
 def save_cart(cart):
     session["cart"] = cart
     session.modified = True
+
 
 def cart_stats(cart):
     total_qty = 0
@@ -30,21 +320,58 @@ def cart_stats(cart):
         total_amount += item["quantity"] * item["price"]
     return total_qty, total_amount
 
-@app.route("/menu", methods = ['get'])
+
+@app.route("/menu", methods=["GET"])
 def menu():
     items = Mon.query.filter(Mon.trangThai == "DANG_BAN").all()
-    cart = get_cart()
-    total_qty, total_amount = cart_stats(cart)
-    return render_template("layout/menu.html",
-                           items=items,
-                           cart=cart,
-                           total_qty=total_qty,
-                           total_amount=total_amount)
 
-@app.route("/cart/add", methods = ['post'])
+    cart = get_cart()
+
+
+    if not cart:
+        session.pop("checkout_mode", None)
+        session.modified = True
+
+    total_qty, total_amount = cart_stats(cart)
+    service_fee = total_amount * 0.05
+    grand_total = total_amount + service_fee
+
+    checkout_mode = bool(session.get("checkout_mode", False))
+
+    return render_template(
+        "menu.html",
+        items=items,
+        cart=cart,
+        total_qty=total_qty,
+        total_amount=total_amount,
+        LoaiMonEnum=LoaiMonEnum,
+        show_checkout=checkout_mode,
+        checkout_mode=checkout_mode,
+        errors=session.pop("checkout_errors", {}),
+        checkout_form=session.pop("checkout_form", {"name": "", "phone": "", "address": ""}),
+        service_fee=service_fee,
+        grand_total=grand_total
+    )
+
+
+
+MAX_CART_ITEMS = 10
+
+def cart_too_many(cart: dict) -> bool:
+    return len(cart.keys()) >= MAX_CART_ITEMS
+
+
+@app.route("/cart/add", methods=['POST'])
+@block_when_checkout
 def cart_add():
     mon_id = int(request.form.get("mon_id", 0))
-    qty = int(request.form.get("quantity", 1))
+    qty_raw = (request.form.get("quantity", "1") or "1").strip()
+
+    try:
+        qty = int(qty_raw)
+    except:
+        qty = 1
+
     if mon_id <= 0 or qty <= 0:
         return redirect(url_for("menu"))
 
@@ -55,62 +382,385 @@ def cart_add():
     cart = get_cart()
     key = str(mon_id)
 
+    if key not in cart and len(cart) >= MAX_CART_ITEMS:
+        return redirect(url_for("menu"))
+
     if key not in cart:
         cart[key] = {
             "id": mon.id,
             "name": mon.name,
             "price": float(mon.gia),
             "image": mon.image or "",
-            "quantity": 0
+            "quantity": 0,
+            "options": {}  # để đồng bộ cấu trúc
         }
 
     cart[key]["quantity"] += qty
     save_cart(cart)
-
     return redirect(url_for("menu"))
 
-@app.route("/cart/update", methods = ['post'])
-def cart_update():
-    mon_id = str(int(request.form.get("mon_id", 0)))
-    qty = int(request.form.get("quantity", 1))
 
+@app.route("/cart/inc", methods=['POST'])
+@block_when_checkout
+def cart_inc():
+    key = (request.form.get("key") or request.form.get("mon_id") or "").strip()
     cart = get_cart()
-    if mon_id in cart:
-        if qty <= 0:
-            cart.pop(mon_id, None)
-        else:
-            cart[mon_id]["quantity"] = qty
+
+    if key in cart:
+        cart[key]["quantity"] += 1
         save_cart(cart)
 
     return redirect(url_for("menu"))
 
-@app.route("/cart/remove", methods = ['post'])
-def cart_remove():
-    mon_id = str(int(request.form.get("mon_id", 0)))
+
+@app.route("/cart/dec", methods=['POST'])
+@block_when_checkout
+def cart_dec():
+    key = (request.form.get("key") or request.form.get("mon_id") or "").strip()
     cart = get_cart()
-    cart.pop(mon_id, None)
+
+    if key in cart:
+        cart[key]["quantity"] -= 1
+        if cart[key]["quantity"] <= 0:
+            cart.pop(key, None)
+        save_cart(cart)
+
+    return redirect(url_for("menu"))
+
+
+@app.route("/cart/update", methods=['POST'])
+@block_when_checkout
+def cart_update():
+    key = (request.form.get("key") or request.form.get("mon_id") or "").strip()
+    qty_raw = (request.form.get("quantity") or "1").strip()
+
+    cart = get_cart()
+    if key in cart:
+        try:
+            qty = int(qty_raw)
+        except:
+            qty = cart[key]["quantity"]  # nhập bậy thì giữ nguyên
+
+        if qty <= 0:
+            cart.pop(key, None)
+        else:
+            cart[key]["quantity"] = qty
+
+        save_cart(cart)
+
+    return redirect(url_for("menu"))
+
+
+@app.route("/cart/remove", methods=['POST'])
+@block_when_checkout
+def cart_remove():
+    key = (request.form.get("key") or request.form.get("mon_id") or "").strip()
+    cart = get_cart()
+    cart.pop(key, None)
     save_cart(cart)
     return redirect(url_for("menu"))
 
 
-@app.route("/pos")
-def pos_page():
-    # 1. Kiểm tra quyền nhân viên
-    if session.get('role') != 'NHAN_VIEN':
-        return redirect(url_for('login'))
-        
-    # 2. Lấy danh sách món ăn từ DB
-    ds_mon = Mon.query.all()
-    
+@app.route("/cart/clear", methods=["POST"])
+def cart_clear():
+    session.pop("cart", None)
+    session.pop("checkout_mode", None)
+    session.modified = True
+    return redirect(url_for("menu"))
+
+@app.route("/checkout", methods=["GET", "POST"])
+def checkout():
+    cart = get_cart()
+    if not cart:
+        # giỏ rỗng thì chắc chắn tắt checkout mode
+        session.pop("checkout_mode", None)
+        session.modified = True
+        return redirect(url_for("menu"))
+
+    total_qty, total_amount = cart_stats(cart)
+    service_fee = total_amount * 0.05
+    grand_total = total_amount + service_fee
+
+    # bật chế độ checkout để UI lock cart
+    session["checkout_mode"] = True
+    session.modified = True
+
+    errors = {}
+    form = {"name": "", "phone": "", "address": ""}
+
+    if request.method == "POST":
+        # ===== 1) validate =====
+        form["name"] = (request.form.get("name") or "").strip()
+        form["phone"] = (request.form.get("phone") or "").strip()
+        form["address"] = (request.form.get("address") or "").strip()
+
+        if not form["name"]:
+            errors["name"] = "Vui lòng nhập tên."
+        if not form["phone"]:
+            errors["phone"] = "Vui lòng nhập số điện thoại."
+        elif (not form["phone"].isdigit()) or len(form["phone"]) != 10:
+            errors["phone"] = "Số điện thoại phải đủ 10 số."
+        if not form["address"]:
+            errors["address"] = "Vui lòng nhập địa chỉ."
+
+        if not errors:
+            # ===== 2) upsert khách hàng theo sdt =====
+            kh = KhachHang.query.filter_by(sdt=form["phone"]).first()
+            if not kh:
+                kh = KhachHang(
+                    name=form["name"],
+                    sdt=form["phone"],
+                    diaChi=form["address"],
+                    loaiKhachHang=LoaiDungEnum.TAI_NHA
+                )
+                db.session.add(kh)
+                db.session.flush()  # lấy kh.id (chưa commit)
+            else:
+                kh.name = form["name"]
+                kh.diaChi = form["address"]
+                if not kh.loaiKhachHang:
+                    kh.loaiKhachHang = LoaiDungEnum.TAI_NHA
+
+            # ===== 3) tạo hóa đơn CHỜ THANH TOÁN =====
+            hd = HoaDon(
+                name="HD",  # ✅ tạm để qua NOT NULL, lát set lại theo id
+                ngayThanhToan=None,
+                soBan=None,
+                tongTienHang=float(total_amount),
+                thue=0.0,
+                phiPhucVu=float(service_fee),
+                giamGia=0.0,
+                tongThanhToan=float(grand_total),
+                loaiHoaDon=LoaiDungEnum.TAI_NHA,
+                trangThai=TrangThaiHoaDonEnum.CHO_THANH_TOAN,
+                khachHang_id=kh.id
+            )
+            db.session.add(hd)
+            db.session.flush()  # lấy hd.id để gắn chi tiết
+
+            # ===== 4) tạo chi tiết hóa đơn từ cart =====
+            for item in cart.values():
+                qty = int(item.get("quantity", 0))
+                price = float(item.get("price", 0.0))
+                if qty <= 0:
+                    continue
+
+                opts = item.get("options") or {}
+                size = opts.get("size") or SizeEnum.S
+                muc_duong = int(opts.get("mucDuong", 100))
+                muc_da = int(opts.get("mucDa", 100))
+
+                ct = ChiTietHoaDon(
+                    soLuong=qty,
+                    donGia=price,
+                    thanhTien=price * qty,
+                    ghiChu=None,
+                    size=size,
+                    mucDuong=muc_duong,
+                    mucDa=muc_da,
+                    hoaDon_id=hd.id,
+                    mon_id=int(item["id"])
+                )
+                db.session.add(ct)
+
+            db.session.flush()
+
+            # ===== 5) set mã tham chiếu cho chuyển khoản =====
+            # (đảm bảo bạn đã thêm cột maThamChieu vào HoaDon)
+            hd.name = f"HD{hd.id:06d}"
+            hd.maThamChieu = f"HD{hd.id}"
+
+            # commit tất cả
+            db.session.commit()
+
+            # ===== 6) clear cart + tắt checkout mode =====
+            session.pop("cart", None)
+            session.pop("checkout_mode", None)
+            session.modified = True
+
+            # ===== 7) chuyển sang trang QR =====
+            return redirect(url_for("payment_qr", hoa_don_id=hd.id))
+
+    # ===== GET hoặc POST có lỗi: render lại menu ở chế độ checkout =====
+    items = Mon.query.filter(Mon.trangThai == "DANG_BAN").all()
+    return render_template(
+        "menu.html",
+        items=items,
+        cart=cart,
+        total_qty=total_qty,
+        total_amount=total_amount,
+        LoaiMonEnum=LoaiMonEnum,
+        show_checkout=True,
+        checkout_mode=True,
+        errors=errors,
+        checkout_form=form,
+        service_fee=service_fee,
+        grand_total=grand_total
+    )
+
+
+
+@app.route("/checkout/start", methods=["POST"])
+def checkout_start():
+    session["checkout_mode"] = True
+    session.modified = True
+    return redirect(url_for("menu"))
+
+
+@app.route("/checkout/cancel", methods=["POST"])
+def checkout_cancel():
+    session.pop("checkout_mode", None)
+    session.modified = True
+    return redirect(url_for("menu"))
+
+
+@app.route("/checkout/done", methods=["GET"])
+def checkout_done():
+    # trang trắng placeholder – lát bạn yêu cầu làm tiếp
+    return render_template("checkout_done.html")
+
+
+
+
+@app.route("/webhook/sepay", methods=["POST"])
+def sepay_webhook():
+    data = request.get_json(silent=True) or {}
+    if not data:
+        return jsonify({"ok": True, "message": "no data"}), 200
+
+    amount = data.get("transferAmount", None)
+    if amount is None:
+        amount = data.get("amount", 0)
+    try:
+        amount = int(float(amount))
+    except:
+        amount = 0
+
+    content = (data.get("content") or "").strip()
+    description = (data.get("description") or "").strip()
+
+    status = (data.get("status") or "").strip().upper()
+    transfer_type = (data.get("transferType") or data.get("type") or "").strip().lower()
+
+    # chỉ xử lý tiền vào
+    if transfer_type and transfer_type != "in":
+        return jsonify({"ok": True, "message": "ignore (not incoming)"}), 200
+
+    text = f"{description} {content}".strip()
+
+    # bắt mã HD dễ hơn (HD15, HD000123...)
+    m = re.search(r"HD\d+", text)
+    if not m:
+        return jsonify({"ok": True, "message": "ignore (no HD code)"}), 200
+
+    ma_hd = m.group(0)
+
+    # nếu có status thì chỉ nhận SUCCESS
+    if status and status != "SUCCESS":
+        return jsonify({"ok": True, "message": f"ignore (status={status})"}), 200
+
+    hoa_don = HoaDon.query.filter_by(maThamChieu=ma_hd).first()
+    if not hoa_don:
+        return jsonify({"ok": True, "message": f"ignore (HoaDon {ma_hd} not found)"}), 200
+
+    if hoa_don.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN:
+        return jsonify({"ok": True, "message": "already paid"}), 200
+
+    try:
+        expected = int(round(float(hoa_don.tongThanhToan)))
+    except:
+        expected = 0
+
+    if expected != amount:
+        return jsonify({
+            "ok": True,
+            "message": "amount mismatch",
+            "expected": expected,
+            "got": amount,
+            "ma_hd": ma_hd
+        }), 200
+
+    hoa_don.trangThai = TrangThaiHoaDonEnum.DA_THANH_TOAN
+    hoa_don.ngayThanhToan = datetime.datetime.now()
+    db.session.commit()
+
+    print(f"[SePay] CONFIRMED {ma_hd} amount={amount}")
+    return jsonify({"ok": True, "message": "Payment confirmed", "ma_hd": ma_hd}), 200
+
+
+VIETQR_TEMPLATE_ID = "akGFPiZ"
+def vietqr_quicklink(amount: int, add_info: str) -> str:
+    add_info = urllib.parse.quote(add_info)
+    return (
+        f"https://api.vietqr.io/image/{BANK_ACQ_ID}-{BANK_ACCOUNT_NO}-{VIETQR_TEMPLATE_ID}.jpg"
+        f"?amount={int(amount)}&addInfo={add_info}&accountName={urllib.parse.quote(BANK_ACCOUNT_NAME)}"
+    )
+
+
+@app.route("/payment/qr/<int:hoa_don_id>", methods=["GET"])
+def payment_qr(hoa_don_id):
+    hd = HoaDon.query.get_or_404(hoa_don_id)
+
+    # đảm bảo có mã tham chiếu
+    if not hd.maThamChieu:
+        hd.maThamChieu = f"HD{hd.id}"
+        db.session.commit()
+
+    # Nếu đã thanh toán rồi -> cho chuyển thẳng qua success
+    if hd.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN:
+        return redirect(url_for("payment_success", hoa_don_id=hd.id))
+
+    # Chỉ tạo QR khi đang chờ thanh toán
+    if hd.trangThai != TrangThaiHoaDonEnum.CHO_THANH_TOAN:
+        abort(400)
+
+    qr_url = vietqr_quicklink(amount=int(hd.tongThanhToan), add_info=hd.maThamChieu)
+    return render_template("payment_qr.html", hoa_don=hd, qr_url=qr_url)
+
+
+@app.route("/payment/status/<int:hoa_don_id>")
+def payment_status(hoa_don_id):
+    hd = HoaDon.query.get_or_404(hoa_don_id)
+    return jsonify({
+        "status": hd.trangThai.value
+    })
+
+@app.route("/payment/success/<int:hoa_don_id>")
+def payment_success(hoa_don_id):
+    hd = HoaDon.query.get_or_404(hoa_don_id)
+    return render_template("payment_success.html", hoa_don=hd)
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    return render_template("register.html")
+
+
+
 
 @app.route("/admin")
 def admin_dashboard():
     # Kiểm tra quyền Admin
     if session.get('role') not in ['QUAN_LY_CUA_HANG', 'QUAN_LY_KHO']:
         return redirect(url_for('login'))
-        
+
     return render_template("admin/dashboard.html")
 
-if __name__=="__main__":
+@login.user_loader
+def load_user(user_id):
+    return NhanVienCuaHang.query.get(int(user_id))
+
+
+@app.route("/pos")
+@login_required
+def pos_page():
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role_str != "NHAN_VIEN":
+        return redirect(url_for("login_my_user"))
+    ds_mon = Mon.query.all()
+    return render_template("pos.html", ds_mon=ds_mon)
+
+
+if __name__ == "__main__":
     with app.app_context():
-        app.run(debug=True)
+        app.run(host="0.0.0.0", port=5000, debug=True)

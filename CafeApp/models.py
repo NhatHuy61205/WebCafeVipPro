@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer,Time, String, DateTime, Enum as SqlEnum,Date, Float, ForeignKey
 from sqlalchemy.orm import relationship
-
-from CafeApp import db, app
+from flask_login import UserMixin
+from CafeApp import db
 import datetime
 from enum import Enum
 
@@ -28,7 +28,7 @@ class TrangThaiEnum(Enum):
     INACTIVE = "INACTIVE"
 
 
-class NhanVienCuaHang(Base):
+class NhanVienCuaHang(Base, UserMixin):
 
     sdt = Column(String(20), nullable=False, unique=True)
     tenDangNhap = Column(String(100), nullable=True, unique=True)
@@ -53,16 +53,15 @@ class KhachHang(Base):
 
 
 class TrangThaiHoaDonEnum(Enum):
-    TAM = "TAM"
+    HUY = "HUY"
     CHO_THANH_TOAN = "CHO_THANH_TOAN"
     DA_THANH_TOAN = "DA_THANH_TOAN"
-    DANG_CHE_BIEN = "DANG_CHE_BIEN"
-    HOAN_THANH = "HOAN_THANH"
+
 
 
 class HoaDon(Base):
 
-    ngayThanhToan = Column(DateTime, nullable=True)
+    ngayThanhToan = Column(DateTime, nullable=True,default=datetime.datetime.now())
     soBan = Column(Integer, nullable=True)
     tongTienHang = Column(Float, default=0.0)
     thue = Column(Float, default=0.0)
@@ -70,9 +69,10 @@ class HoaDon(Base):
     giamGia = Column(Float, default=0.0)
     tongThanhToan = Column(Float, default=0.0)
     loaiHoaDon = Column(SqlEnum(LoaiDungEnum),nullable=False)
-    trangThai = Column(SqlEnum(TrangThaiHoaDonEnum),default=TrangThaiHoaDonEnum.TAM)
+    trangThai = Column(SqlEnum(TrangThaiHoaDonEnum),default=TrangThaiHoaDonEnum.CHO_THANH_TOAN)
     khachHang_id = Column(Integer, ForeignKey(KhachHang.__table__.c.id), nullable=True)
-
+    maThamChieu = Column(String(50), unique=True, nullable=True)  # ví dụ: "HD123"
+    ngayTao = Column(DateTime, default=datetime.datetime.now())
 
 
 
@@ -81,14 +81,23 @@ class TrangThaiMonEnum(Enum):
     TAM_HET = "TAM_HET"
     NGUNG_BAN = "NGUNG_BAN"
 
+class LoaiMonEnum(Enum):
+    NUOC = "NUOC"
+    BANH = "BANH"
+
 class Mon(Base):
-    chiTietHoaDon = relationship("ChiTietHoaDon", backref="mon", lazy=True)
+    chiTietHoaDon = relationship("ChiTietHoaDon", back_populates="mon", lazy=True)
     congThuc = relationship("CongThuc", backref="mon", lazy=True)
     gia = Column(Float, nullable=False)
     moTa = Column(String(255), nullable=True)
     trangThai = Column(SqlEnum(TrangThaiMonEnum), default=TrangThaiMonEnum.DANG_BAN)
     image = Column(String(255))
+    loaiMon = Column(SqlEnum(LoaiMonEnum), nullable=False, default=LoaiMonEnum.NUOC)
 
+class SizeEnum(Enum):
+    S = "S"
+    M = "M"
+    L ="L"
 
 class ChiTietHoaDon(db.Model):
 
@@ -98,9 +107,15 @@ class ChiTietHoaDon(db.Model):
     thanhTien = Column(Float, nullable=False)
     ghiChu = Column(String(255), nullable=True)
 
+    size = Column(SqlEnum(SizeEnum), default=SizeEnum.S)
+    mucDuong = Column(Integer, nullable=False, default=100)  # 0/30/50/70/100...
+    mucDa = Column(Integer, nullable=False, default=100)
+
     hoaDon_id = Column(Integer, ForeignKey(HoaDon.__table__.c.id), nullable=False)
     mon_id = Column(Integer, ForeignKey(Mon.__table__.c.id), nullable=False)
 
+    hoaDon = relationship("HoaDon", backref="chiTiet")
+    mon = relationship("Mon", back_populates="chiTietHoaDon")
 
 class TrangThaiThanhToanEnum(Enum):
     CHO_XU_LY = "CHO_XU_LY"
@@ -205,7 +220,7 @@ class BaoCaoTonKho(Base):
     soNguyenLieuSapHet = Column(Integer, default=0)
     soNguyenLieuHetHang = Column(Integer, default=0)
 
-if __name__=="__main__":
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
+# if __name__=="__main__":
+#     with app.app_context():
+#         db.drop_all()
+#         db.create_all()

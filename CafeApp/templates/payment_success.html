@@ -1,0 +1,33 @@
+{% extends "layout/base.html" %}
+{% block title %}Thanh toán thành công{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="card shadow-sm mx-auto" style="max-width: 720px;">
+    <div class="card-body p-4 text-center">
+      <h3 class="fw-bold text-success mb-2">Thanh toán thành công</h3>
+      <p class="mb-1">Đơn hàng của bạn đang được chuẩn bị.</p>
+      <p class="text-muted small mb-4">
+        Mã đơn: <b>{{ hoa_don.maThamChieu }}</b>
+      </p>
+
+      <div class="text-muted small">
+        Tự động quay về trang chủ sau <span id="sec">3</span> giây...
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let s = 3;
+  const el = document.getElementById("sec");
+  const timer = setInterval(() => {
+    s--;
+    el.textContent = s;
+    if (s <= 0) {
+      clearInterval(timer);
+      window.location.href = "{{ url_for('index') }}";
+    }
+  }, 1000);
+</script>
+{% endblock %}
