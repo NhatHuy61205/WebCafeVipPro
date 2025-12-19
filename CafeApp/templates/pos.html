@@ -2,184 +2,792 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>POS - Bán Hàng</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS - Cafe Vip Pro</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
     <style>
-        body { height: 100vh; overflow: hidden; background-color: #e9ecef; }
-        .product-card { height: 110px; transition: 0.2s; border: 2px solid transparent; cursor: pointer; }
-        .product-card:hover { border-color: #ccc; }
-        .product-active { background-color: #fff3cd !important; border-color: #ffc107 !important; }
-        .hidden { display: none !important; }
-        .scrollable-list { height: calc(100vh - 180px); overflow-y: auto; }
-        .cart-area { height: 100vh; background: white; border-left: 1px solid #ddd; display: flex; flex-direction: column; }
+      .fee-left{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+
+.sum-money{
+  text-align:right;
+  min-width: 90px;   /* đủ để canh thẳng hàng tiền */
+}
+
+
+        #taxCheck{
+  vertical-align: middle;
+  margin-top: 0px;
+}
+
+        /* ===== Service fee input (POS style) ===== */
+.fee-input{
+  width:48px;
+  height:22px;
+  padding:2px 4px;
+  font-size:13px;
+  text-align:right;
+  border:1px solid #ccc;
+  border-radius:6px;
+  outline:none;
+}
+
+.fee-input:focus{
+  border-color:#28a745;
+  box-shadow:0 0 0 1px rgba(40,167,69,.2);
+}
+
+/* Ẩn spinner nếu browser vẫn render */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}
+input[type=number]{
+  -moz-appearance:textfield;
+}
+
+  .cart-area { background:#fff; border-left:1px solid #ddd; height: calc(100vh - 50px); }
+  .inv-top { padding:10px 12px; border-bottom:1px solid #eee; background:#fff; }
+  .inv-title { font-weight:900; font-size:18px; text-align:center; margin:0; }
+  .inv-code { font-weight:800; color:#28a745; }
+
+  .seg-tabs { display:flex; gap:8px; padding:10px 12px; border-bottom:1px solid #eee; background:#f8f9fa; }
+  .seg-btn{
+    flex:1; text-align:center; font-size:14px; padding:10px 6px;
+    border:1px solid #ddd; border-radius:10px; cursor:pointer; background:#fff;
+  }
+  .seg-btn.active{ background:#28a745; border-color:#28a745; color:#fff; font-weight:800; }
+
+  .inv-items-wrap{
+  flex: 1 1 auto;
+  min-height: 0;   /* quan trọng để scroll hoạt động trong flex */
+  overflow: hidden;
+}
+  .inv-items-box{
+    border:1px solid #eee; border-radius:12px; overflow:hidden;
+    background:#fff;
+  }
+  .inv-items-head{ background:#f3f4f6; padding:8px 10px; font-weight:800; font-size:13px; }
+  .inv-items-body{
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+}
+  .table-cart th { font-size:12px; padding:8px; background:#f3f4f6; }
+  .table-cart td { font-size:13px; padding:10px 8px; vertical-align:middle; }
+
+  .inv-sum{
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  background:#fff;
+  border-top: 1px solid #eee;
+}
+  .sum-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;   /* ↓ */
+  font-size:13px;    }
+  .sum-row strong{ font-weight:900; }
+  .sum-total{
+    display:flex; justify-content:space-between; align-items:center;
+      padding:6px 10px;    /* ↓ */
+  margin:6px 0;        /* ↓ */
+  border-radius:10px;
+    background:#fff3e6; border:1px solid #ffe0c2;
+
+  }
+  .sum-total .label{ font-weight:900; font-size:13px; }
+  .sum-total .value{ font-weight:900; font-size:20px;  color:#d0021b; }
+
+ .inv-actions{
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  background:#fff;
+  border-top: 1px solid #eee;
+}
+  .btn-pay { width:100%; background:#fd7e14; color:#fff; font-weight:900; border-radius:12px; padding:8px; border:none; font-size:14px; }
+  .btn-pay:hover{ background:#e96b02; }
+  .btn-soft{ border-radius:12px; }
+        .customer-box{
+  border:1px solid #e9ecef;
+  border-radius:10px;
+  background:#fff;
+  padding:6px 8px;        /* ↓ giảm mạnh */
+  font-size:13px;
+}
+
+.customer-box .text-muted{
+  font-size:11px;
+}
+
+.customer-box .btn{
+  padding:3px 8px;
+  font-size:12px;
+}
+
+    </style>
+
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; overflow: hidden; }
+
+        /*  HEADER */
+        .pos-header { background-color: #28a745; color: white; padding: 0 15px; height: 50px; display: flex; align-items: center; justify-content: space-between; }
+
+        .header-logo { font-weight: bold; font-size: 20px; margin-right: 20px; display: flex; align-items: center; }
+
+        .header-btn { color: white; background: transparent; border: none; padding: 5px 15px; font-weight: 600; font-size: 14px; }
+        .header-btn:hover, .header-btn.active { background-color: rgba(255,255,255,0.2); border-radius: 4px;}
+        .header-icon { font-size: 18px; margin-left: 15px; cursor: pointer; }
+
+        /*  CATEGORY TABS  */
+        .cat-bar { background: white; padding: 5px 10px; border-bottom: 1px solid #ddd; white-space: nowrap; overflow-x: auto; }
+        .cat-btn { border: 1px solid #eee; background: #fff; padding: 5px 15px; border-radius: 4px; margin-right: 5px; font-size: 13px; color: #333; }
+
+        /* Active Tab */
+        .cat-btn.active { background-color: #28a745; color: white; border-color: #28a745; }
+
+        /*  PRODUCT GRID  */
+        .product-area { height: calc(100vh - 100px); overflow-y: auto; padding: 10px; transition: all 0.3s; }
+        .product-card {
+            background: white; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: pointer; overflow: hidden; position: relative; height: 120px; margin-bottom: 10px;
+        }
+        .product-card:hover { border: 1px solid #28a745; }
+        .p-img { width: 100%; height: 70px; object-fit: cover; }
+        .p-price-tag {
+            position: absolute; top: 0; right: 0;
+            background-color: #28a745; color: white;
+            font-size: 12px; padding: 2px 6px;
+            border-bottom-left-radius: 5px;
+        }
+        .p-name { font-size: 13px; font-weight: 600; padding: 5px; line-height: 1.2; text-align: center; color: #333; }
+
+        /*  CART SIDEBAR  */
+        .cart-area{
+  height: calc(100vh - 56px); /* nếu header cao khác thì chỉnh 56px */
+  display:flex;
+  flex-direction:column;
+  overflow:hidden; /* quan trọng: chặn đẩy xuống */
+}
+
+        /* Order Tabs */
+        .order-tabs { display: flex; border-bottom: 1px solid #ddd; padding: 5px; background: #f8f9fa; }
+        .order-tab-btn {
+            flex: 1; text-align: center; font-size: 13px; padding: 5px;
+            border: 1px solid transparent; cursor: pointer; color: #555;
+        }
+        .order-tab-btn.active { background: #28a745; color: white; border-radius: 3px; }
+
+        /* Cart List */
+        .cart-list { flex: 1; overflow-y: auto; padding: 0; }
+        .table-cart th { font-size: 12px; background: #eee; padding: 5px; }
+        .table-cart td { font-size: 13px; padding: 8px 5px; vertical-align: middle; }
+        .btn-qty { padding: 0 5px; font-size: 12px; border: 1px solid #ddd; background: #fff; }
+
+        /* Cart Footer */
+        .cart-footer { padding: 10px; background: #f8f9fa; border-top: 1px solid #ddd; }
+        .fee-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+
+        .btn-pay { width: 100%; background-color: #fd7e14; color: white; font-weight: bold; padding: 10px; border: none; font-size: 16px; }
+        .btn-pay:hover { background-color: #e96b02; }
+
+        /*  LAYOUT CONTROL  */
+        .layout-full .col-left { flex: 0 0 100%; max-width: 100%; }
+        .layout-split .col-left { flex: 0 0 66.66%; max-width: 66.66%; }
+        .layout-split .cart-area { display: flex; flex: 0 0 33.33%; max-width: 33.33%; }
+
     </style>
 </head>
 <body>
-    <div class="container-fluid h-100">
-        <div class="row h-100">
-            <div class="col-8 p-3 d-flex flex-column">
-                <div class="mb-3 d-flex gap-2">
-                    <button class="btn btn-dark fw-bold">TẤT CẢ</button>
-                    <button class="btn btn-outline-dark">CÀ PHÊ</button>
-                    <button class="btn btn-outline-dark">TRÀ SỮA</button>
-                    <button class="btn btn-outline-dark">TRÀ</button>
-                    <button class="btn btn-outline-dark">BÁNH NGỌT</button>
-                </div>
 
-                <div class="row row-cols-4 g-2 overflow-auto flex-grow-1 pb-5" style="align-content: flex-start;">
-                    {% for mon in items %}
-                    
-                    {% set quantity = cart_session.get(mon.id | string, 0) %}
-                    
-                    {% set is_active = 'product-active' if quantity > 0 else '' %}
-                    {% set show_controls = '' if quantity > 0 else 'hidden' %}
-                    {% set show_default = 'hidden' if quantity > 0 else '' %}
+<div class="pos-header">
+    <div class="d-flex align-items-center">
+        <div class="header-logo">
+            <i class="fas fa-leaf mr-2"></i> CAFE VIP PRO
+        </div>
 
-                    <div class="col">
-                        <div id="card-{{ mon.id }}" 
-                             class="card h-100 product-card shadow-sm p-2 d-flex flex-column justify-content-between text-center {{ is_active }}"
-                             onclick="handleClickCard({{ mon.id }})">
-                            
-                            <div>
-                                <div class="fw-bold text-truncate">{{ mon.name }}</div>
-                                <div class="text-primary fw-bold small">{{ "{:,.0f}".format(mon.gia) }}</div>
-                            </div>
+        <button class="header-btn active"><i class="fas fa-utensils"></i> Order Online</button>
+        <button class="header-btn"><i class="fas fa-truck"></i> Số giao hàng</button>
+    </div>
+    <div class="d-flex align-items-center">
+        <span class="mr-3"><i class="fas fa-user"></i> {{ current_user.name }}</span>
+        <i class="fas fa-sync header-icon" title="Đồng bộ"></i>
+        <i class="fas fa-cloud header-icon" title="Đám mây"></i>
+        <div class="dropdown">
+            <i class="fas fa-bars header-icon dropdown-toggle"
+               id="posMenu"
+               data-toggle="dropdown"
+               aria-haspopup="true"
+               aria-expanded="false"
+               style="cursor:pointer">
+            </i>
 
-                            <div id="default-{{ mon.id }}" class="mt-2 {{ show_default }}">
-                                <i class="fas fa-plus-circle text-muted opacity-25 fa-2x"></i>
-                            </div>
+            <div class="dropdown-menu dropdown-menu-right">
+                <a class="dropdown-item" href="{{ url_for('order_history') }}">
+                    <i class="fas fa-receipt mr-2"></i> Lịch sử đơn hàng
+                </a>
 
-                            <div id="controls-{{ mon.id }}" class="d-flex justify-content-center align-items-center gap-2 mt-1 {{ show_controls }}" onclick="event.stopPropagation()">
-                                <button class="btn btn-sm btn-outline-dark px-2" onclick="updateItem({{ mon.id }}, 'decrease')">
-                                    <i class="fas fa-minus"></i>
-                                </button>
-                                <span id="qty-{{ mon.id }}" class="fw-bold fs-5">{{ quantity }}</span>
-                                <button class="btn btn-sm btn-outline-dark px-2" onclick="updateItem({{ mon.id }}, 'increase')">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+                <div class="dropdown-divider"></div>
 
-            <div class="col-4 cart-area p-0 shadow-lg">
-                <div class="p-3 bg-white border-bottom shadow-sm z-1">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="fw-bold m-0"><i class="fas fa-receipt me-2"></i>Đơn hàng</h4>
-                            <small class="text-muted">NV: {{ session.get('user_name') }}</small>
-                        </div>
-                        <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-danger">Đăng xuất</a>
-                    </div>
-                </div>
-
-                <div id="cart-list" class="flex-grow-1 p-2 overflow-auto bg-light">
-                    </div>
-
-                <div class="p-3 border-top bg-white z-1">
-                    <div class="d-flex justify-content-between fs-4 fw-bold mb-3">
-                        <span>Tổng tiền:</span>
-                        <span id="total-price" class="text-danger">0đ</span>
-                    </div>
-                    <div class="row g-2">
-                        <div class="col-4">
-                            <button class="btn btn-danger w-100 py-3 fw-bold h-100" onclick="updateItem(0, 'clear')">HỦY</button>
-                        </div>
-                        <div class="col-8">
-                            <button class="btn btn-success w-100 py-3 fw-bold h-100 shadow">THANH TOÁN</button>
-                        </div>
-                    </div>
-                </div>
+                <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
+                    <i class="fas fa-sign-out-alt mr-2"></i> Đăng xuất
+                </a>
             </div>
         </div>
     </div>
+</div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const initialData = {
-                cart: [
-                    {% for item in cart %}
-                    { id: {{ item.product.id }}, name: "{{ item['product_name'] }}", quantity: {{ item.quantity }}, total_price: {{ item.total_price }} },
-                    {% endfor %}
-                ],
-                total: {{ total }}
-            };
-            renderCart(initialData);
-        });
 
-        function handleClickCard(id) {
-            const card = document.getElementById(`card-${id}`);
-            if (!card.classList.contains('product-active')) {
-                updateItem(id, 'add');
-            }
-        }
+<div class="container-fluid p-0">
+    <div id="mainLayout"
+         class="row no-gutters {% if pos_cart and pos_cart|length > 0 or modal_ctx %}layout-split{% else %}layout-full{% endif %}">
 
-        function updateItem(id, action) {
-            fetch('/api/pos/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ product_id: id, action: action })
-            })
-            .then(response => response.json())
-            .then(data => {
-                updateGridUI(data.cart_session);
-                renderCart(data);
-            })
-            .catch(error => console.error('Lỗi:', error));
-        }
+        <div class="col-12 col-left">
+            <div class="cat-bar">
+                <button class="cat-btn active">Tất cả</button>
+                <button class="cat-btn">Cà phê</button>
+                <button class="cat-btn">Trà</button>
+                <button class="cat-btn">Bánh ngọt</button>
+                <button class="cat-btn">Khác</button>
 
-        function updateGridUI(cartSession) {
-            document.querySelectorAll('.product-card').forEach(card => {
-                const id = card.id.replace('card-', '');
-                const qty = cartSession[id] || 0;
-                const defaultDiv = document.getElementById(`default-${id}`);
-                const controlsDiv = document.getElementById(`controls-${id}`);
-                const qtySpan = document.getElementById(`qty-${id}`);
+                <div style="display:inline-block; float:right; width: 300px;">
+                    <input type="text" class="form-control form-control-sm" placeholder="Tìm món (F3)...">
+                </div>
+            </div>
 
-                if (qty > 0) {
-                    card.classList.add('product-active');
-                    defaultDiv.classList.add('hidden');
-                    controlsDiv.classList.remove('hidden');
-                    qtySpan.innerText = qty;
-                } else {
-                    card.classList.remove('product-active');
-                    defaultDiv.classList.remove('hidden');
-                    controlsDiv.classList.add('hidden');
-                }
-            });
-        }
+            <div class="product-area">
+                <div class="row px-2">
+                    {% for item in items %}
+                    <div class="col-6 col-md-3 col-lg-2 px-1">
+                        <a href="{{ url_for('pos_page', page=page, mon_id=item.id) }}"
+                           class="text-decoration-none text-dark">
 
-        function renderCart(data) {
-            const list = document.getElementById('cart-list');
-            const totalSpan = document.getElementById('total-price');
-            totalSpan.innerText = new Intl.NumberFormat('vi-VN').format(data.total) + 'đ';
-            list.innerHTML = '';
-            if (data.cart.length === 0) {
-                list.innerHTML = `<div class="text-center text-muted mt-5"><i class="fas fa-shopping-basket fa-3x mb-3 opacity-25"></i><p>Chưa có món nào</p></div>`;
-                return;
-            }
-            data.cart.forEach(item => {
-                const html = `
-                <div class="card border-0 shadow-sm mb-2">
-                    <div class="card-body p-2 d-flex justify-content-between align-items-center">
-                        <div style="width: 40%">
-                            <div class="fw-bold text-truncate">${item.name}</div>
-                            <div class="text-muted small">${new Intl.NumberFormat('vi-VN').format(item.total_price)}</div>
-                        </div>
-                        <div class="d-flex align-items-center gap-1 bg-light rounded px-1">
-                            <button class="btn btn-sm btn-link text-dark" onclick="updateItem(${item.id}, 'decrease')"><i class="fas fa-minus small"></i></button>
-                            <span class="fw-bold small mx-1">${item.quantity}</span>
-                            <button class="btn btn-sm btn-link text-dark" onclick="updateItem(${item.id}, 'increase')"><i class="fas fa-plus small"></i></button>
-                        </div>
-                        <button class="btn btn-sm text-danger" onclick="updateItem(${item.id}, 'remove')"><i class="fas fa-times"></i></button>
+                            <div class="product-card"
+                            >
+                                <div class="p-price-tag">{{ "{:,.0f}".format(item.gia) }}</div>
+
+                                {% if item.image %}
+                                <img src="{{ url_for('static', filename='img/' + item.image) }}" class="p-img"
+                                     alt="{{ item.name }}">
+                                {% else %}
+                                <img src="https://via.placeholder.com/150?text={{ item.name[:2] }}" class="p-img">
+                                {% endif %}
+
+                                <div class="p-name">{{ item.name }}</div>
+                            </div>
+                        </a>
                     </div>
-                </div>`;
-                list.insertAdjacentHTML('beforeend', html);
-            });
+                    {% endfor %}
+                </div>
+                <div class="pos-pagination d-flex justify-content-center">
+                    {% if pages > 1 %}
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('pos_page', page=page-1) }}">«</a>
+                            </li>
+
+                            {% for p in range(1, pages + 1) %}
+                            <li class="page-item {% if p == page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('pos_page', page=p) }}">{{ p }}</a>
+                            </li>
+                            {% endfor %}
+
+                            <li class="page-item {% if page >= pages %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('pos_page', page=page+1) }}">»</a>
+                            </li>
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+
+            </div>
+
+
+        </div>
+
+        <div class="cart-area d-flex flex-column">
+
+            <!-- Title center -->
+            <div class="inv-top">
+                <p class="inv-title">
+                    HÓA ĐƠN
+                </p>
+            </div>
+
+            <!-- Loại hóa đơn -->
+            <div class="seg-tabs">
+                <div class="seg-btn active" onclick="setOrderType('TAI_QUAN', this)">
+                    <i class="fas fa-chair mr-1"></i> Tại quán
+                </div>
+                <div class="seg-btn" onclick="setOrderType('MANG_DI', this)">
+                    <i class="fas fa-shopping-bag mr-1"></i> Mang đi
+                </div>
+            </div>
+
+            <!-- Items box (PHẦN NÀY SẼ CUỘN) -->
+            <div class="inv-items-wrap flex-grow-1" style="min-height:0; overflow:hidden;">
+                <div class="inv-items-box h-100 d-flex flex-column">
+                    <div class="inv-items-head">Danh sách món</div>
+
+                    <div class="inv-items-body flex-grow-1" style="overflow-y:auto;">
+                        <table class="table table-sm table-cart mb-0">
+                            <thead>
+                            <tr>
+                                <th style="width:52%">Tên món</th>
+                                <th style="width:22%">SL</th>
+                                <th class="text-right">Tiền</th>
+                                <th style="width:6%"></th>
+                            </tr>
+                            </thead>
+
+                            <!-- QUAN TRỌNG: tbody id này phải khớp JS -->
+                            <tbody id="cartTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary (NẰM YÊN Ở DƯỚI) -->
+            <div class="inv-sum mt-2">
+                <!-- KHÁCH HÀNG (server-side, không JS) -->
+                <div class="customer-box d-flex align-items-center justify-content-between mb-1">
+
+                    <div class="d-flex align-items-center">
+                        <span style="font-size:18px;margin-right:8px;">👤</span>
+                        <div>
+                            <div class="text-muted" style="font-size:12px;line-height:1;">Khách hàng</div>
+
+                            {% set cust = session.get('pos_customer') %}
+                            {% if cust and cust.get('phone') %}
+                            <div class="font-weight-bold" style="font-size:14px;">
+                                {{ cust.get('name') or 'Khách' }} - {{ cust.get('phone') }}
+                            </div>
+                            {% else %}
+                            <div class="font-weight-bold" style="font-size:14px;">
+                                Chưa có thông tin
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex" style="gap:8px;">
+
+                        {% if cust and cust.get('phone') %}
+                        {# === ĐÃ CÓ KHÁCH → CHỈNH SỬA === #}
+                        <a class="btn btn-sm btn-outline-success"
+                           href="{{ url_for('pos_page', page=page, customer_modal=1) }}">
+                            <i class="fas fa-edit mr-1"></i> Chỉnh sửa
+                        </a>
+
+                        <form method="post" action="{{ url_for('pos_customer_clear') }}" class="m-0">
+                            <input type="hidden" name="page" value="{{ page }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-trash mr-1"></i> Xóa
+                            </button>
+                        </form>
+
+                        {% else %}
+                        {# === CHƯA CÓ KHÁCH → THÊM THÔNG TIN === #}
+                        <a class="btn btn-sm btn-outline-success"
+                           href="{{ url_for('pos_page', page=page, customer_modal=1) }}">
+                            <i class="fas fa-plus mr-1"></i> Thêm thông tin
+                        </a>
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+                <div class="sum-row">
+                    <span>Số lượng món:</span>
+                    <strong id="itemCount">0</strong>
+                </div>
+
+                <div class="sum-row">
+                    <span>Tiền hàng: </span>
+                    <strong id="subTotal">0</strong>
+                </div>
+
+                <div class="sum-row">
+      <span>
+        Thuế (8%)
+        <input type="checkbox" checked id="taxCheck" onchange="renderCart()">
+      </span>
+                    <span id="taxValue">0</span>
+                </div>
+
+              <!-- form rời: không phá các form khác -->
+<form id="serviceFeeForm" method="post" action="{{ url_for('pos_set_service_fee') }}" style="display:none;"></form>
+
+<div class="sum-row">
+  <span class="fee-left">
+    <span>Phí phục vụ:</span>
+    <input
+      id="serviceFee"
+      type="number"
+      name="service_percent"
+      form="serviceFeeForm"
+      class="fee-input"
+      min="0"
+      max="100"
+      step="1"
+      value="{{ session.get('pos_service_percent', 0) }}"
+      oninput="this.value = String(this.value).replace(/[^0-9]/g,''); renderCart();"
+      onkeydown="if(event.key==='Enter'){ document.getElementById('serviceFeeForm').submit(); }"
+    />
+    <span>%</span>
+  </span>
+
+  <span id="serviceValue" class="sum-money">0</span>
+</div>
+
+
+
+                <div class="sum-total">
+                    <div class="label">TỔNG THANH TOÁN:</div>
+                    <div class="value" id="finalTotal">0</div>
+                </div>
+            </div>
+
+            <!-- Actions (LUÔN NẰM DƯỚI CÙNG) -->
+            <div class="inv-actions mt-auto">
+                <div class="row no-gutters">
+                    <div class="col-4 pr-1">
+                        <form method="post" action="{{ url_for('pos_cart_clear') }}">
+                            <button type="submit" class="btn btn-outline-secondary btn-soft w-100">
+                                <i class="fas fa-times mr-1"></i> Hủy
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="col-4 px-1">
+                        <form action="{{ url_for('pos_print_temp') }}" method="get" target="_blank" class="w-100">
+                            <button type="submit" class="btn btn-light btn-soft w-100 border">
+                                <i class="fas fa-print mr-1"></i> In tạm
+                            </button>
+                        </form>
+
+
+                    </div>
+
+                    <div class="col-4 pl-1">
+                        <form method="post" action="{{ url_for('pos_pay') }}" class="m-0">
+                            <input type="hidden" name="page" value="{{ page }}">
+                            <button type="submit" class="btn-pay">
+                                <i class="fas fa-cash-register mr-1"></i> Thanh toán
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+
+    </div>
+</div>
+
+<script>
+    // ===== cart được inject từ server pos_cart =====
+    let cart = {};
+    {% if pos_cart %}
+      {% for key, it in pos_cart.items() %}
+        cart[{{ key|tojson }}] = {
+          name: {{ it.name|tojson }},
+          price: {{ it.price|float }},
+          qty: {{ it.quantity|int }},
+          options: {{ (it.options or {})|tojson }}
+        };
+      {% endfor %}
+    {% endif %}
+
+    let currentOrderType = 'TAI_QUAN';
+
+    function formatMoney(amount) {
+      return (amount || 0).toLocaleString('vi-VN');
+    }
+
+    // ===== Layout helpers (ít JS) =====
+    function showCartIfNeeded() {
+      const hasCart = Object.keys(cart).length > 0;
+      const hasModal = {{ 'true' if modal_ctx else 'false' }};
+      const layout = document.getElementById('mainLayout');
+
+      if (hasCart || hasModal) {
+        layout.classList.add('layout-split');
+        layout.classList.remove('layout-full');
+      } else {
+        layout.classList.add('layout-full');
+        layout.classList.remove('layout-split');
+      }
+    }
+
+    function renderCart() {
+  const tbody = document.getElementById('cartTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  let subTotal = 0;
+  let itemCount = 0;
+
+  for (let [id, item] of Object.entries(cart)) {
+    const qty = item.qty || 0;
+    const price = item.price || 0;
+    const total = price * qty;
+
+    subTotal += total;
+    itemCount += qty;
+
+
+    let optHtml = '';
+    if (item.options) {
+      if (Array.isArray(item.options.desc) && item.options.desc.length) {
+        optHtml = `
+          <div class="text-muted" style="font-size:12px;line-height:1.2;margin-top:2px;">
+            ${item.options.desc.join('<br>')}
+          </div>
+        `;
+      } else {
+        const parts = [];
+        if (item.options.size) parts.push(`Size: ${item.options.size}`);
+        if (item.options.duong) parts.push(`Đường: ${item.options.duong}%`);
+        if (item.options.da) parts.push(`Đá: ${item.options.da}%`);
+        if (Array.isArray(item.options.topping) && item.options.topping.length) {
+          parts.push(`Topping: ${item.options.topping.join(', ')}`);
         }
-    </script>
+        if (item.options.note && String(item.options.note).trim()) {
+          parts.push(`Ghi chú: ${String(item.options.note).trim()}`);
+        }
+        if (parts.length) {
+          optHtml = `
+            <div class="text-muted" style="font-size:12px;line-height:1.2;margin-top:2px;">
+              ${parts.join('<br>')}
+            </div>
+          `;
+        }
+      }
+    }
+
+    const row = `
+      <tr>
+        <td>
+          <div class="font-weight-bold">${item.name}</div>
+          ${optHtml}
+        </td>
+        <td>
+          <button class="btn-qty" onclick="changeQty('${id}', -1)">-</button>
+          <span class="mx-1 font-weight-bold">${qty}</span>
+          <button class="btn-qty" onclick="changeQty('${id}', 1)">+</button>
+        </td>
+        <td class="text-right font-weight-bold">
+          ${formatMoney(total)}
+        </td>
+        <td class="text-center text-danger" style="cursor:pointer" onclick="removeItem('${id}')">
+          <i class="fas fa-times"></i>
+        </td>
+      </tr>
+    `;
+    tbody.insertAdjacentHTML('beforeend', row);
+  }
+
+  // ===== TÍNH TIỀN =====
+  const tax = document.getElementById('taxCheck')?.checked ? subTotal * 0.08 : 0;
+  let servicePercent = parseFloat(document.getElementById('serviceFee')?.value) || 0;
+servicePercent = Math.max(0, Math.min(100, servicePercent));
+
+  const service = subTotal * (servicePercent / 100);
+  const finalTotal = subTotal + tax + service;
+
+  // ===== UPDATE UI =====
+  if (document.getElementById('itemCount')) {
+    document.getElementById('itemCount').innerText = itemCount;
+  }
+  document.getElementById('subTotal').innerText = formatMoney(subTotal);
+  document.getElementById('taxValue').innerText = formatMoney(tax);
+  if (document.getElementById('serviceValue')) {
+  document.getElementById('serviceValue').innerText = formatMoney(service);
+}
+  document.getElementById('finalTotal').innerText = formatMoney(finalTotal);
+
+  // ✅ quyết định có show giỏ hay không
+  showCartIfNeeded();
+}
+
+
+    // ===== Các hàm cũ (giữ để bạn dùng) =====
+    function changeQty(id, delta) {
+  const f = document.createElement('form');
+  f.method = 'POST';
+
+  if (delta > 0) f.action = `/pos/cart/inc/${encodeURIComponent(id)}`;
+  else f.action = `/pos/cart/dec/${encodeURIComponent(id)}`;
+
+  const inp = document.createElement('input');
+  inp.type = 'hidden';
+  inp.name = 'page';
+  inp.value = '{{ page }}';
+  f.appendChild(inp);
+
+  document.body.appendChild(f);
+  f.submit();
+}
+
+
+    function removeItem(id) {
+  const f = document.createElement('form');
+  f.method = 'POST';
+  f.action = `/pos/cart/remove/${encodeURIComponent(id)}`;
+
+  const inp = document.createElement('input');
+  inp.type = 'hidden';
+  inp.name = 'page';
+  inp.value = '{{ page }}';
+  f.appendChild(inp);
+
+  document.body.appendChild(f);
+  f.submit();
+}
+
+    function cancelOrder() {
+      cart = {};
+      renderCart(); // renderCart sẽ tự hide giỏ
+    }
+
+    function setOrderType(type, btnElement) {
+      currentOrderType = type;
+      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      btnElement.classList.add('active');
+    }
+
+    function payOrder() {
+      if (Object.keys(cart).length === 0) return alert('Chưa chọn món!');
+      alert(`Thanh toán thành công ${document.getElementById('finalTotal').innerText} VNĐ\nLoại: ${currentOrderType}`);
+      cancelOrder();
+    }
+
+    // ✅ Khi load trang: render giỏ + tự quyết định hiện/ẩn
+    renderCart();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+
+{% if modal_ctx %}
+{% set mon = modal_ctx.mon %}
+{% set form = modal_ctx.form %}
+{% set errors = modal_ctx.errors %}
+{% set unit_price = modal_ctx.unit_price %}
+{% set total_price = modal_ctx.total_price %}
+{% set desc_list = modal_ctx.desc_list %}
+{% set SIZE_OPTS = modal_ctx.SIZE_OPTS %}
+{% set SUGAR_OPTS = modal_ctx.SUGAR_OPTS %}
+{% set ICE_OPTS = modal_ctx.ICE_OPTS %}
+{% set TOPPING_OPTS = modal_ctx.TOPPING_OPTS %}
+{% set edit_key = modal_ctx.edit_key %}
+{% set ui_mode = modal_ctx.ui_mode %}
+{% set close_url = modal_ctx.close_url %}
+{% set form_action = modal_ctx.form_action %}
+
+{% include "_drink_modal_body.html" %}
+{% endif %}
+{% include "layout/_flash_modal.html" %}
+{# ===== MODAL KHÁCH HÀNG (server-side show) ===== #}
+{% set open_customer_modal = request.args.get('customer_modal') %}
+{% set open_pay_confirm = request.args.get('pay_confirm') %}
+
+{% if open_customer_modal %}
+<div class="modal-backdrop fade show"></div>
+{% endif %}
+
+<div class="modal fade {% if open_customer_modal %}show{% endif %}" id="customerModal"
+     tabindex="-1" role="dialog"
+     style="{% if open_customer_modal %}display:block;{% else %}display:none;{% endif %}">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content" style="border-radius:14px;">
+            <div class="modal-header">
+                <h5 class="modal-title">Thêm thông tin khách hàng</h5>
+                <a class="close" aria-label="Close"
+                   href="{{ url_for('pos_page', page=page) }}">
+                    <span aria-hidden="true">&times;</span>
+                </a>
+            </div>
+
+            <form method="post" action="{{ url_for('pos_customer_save') }}">
+                <div class="modal-body">
+                    {% set cust = session.get('pos_customer') or {} %}
+
+                    <div class="form-group">
+                        <label>Tên khách hàng</label>
+                        <input type="text" class="form-control" name="customer_name"
+                               value="{{ cust.get('name','') }}" placeholder="Ví dụ: Nguyễn Văn A">
+                    </div>
+
+                    <div class="form-group mb-0">
+                        <label>Số điện thoại <span class="text-danger">*</span></label>
+                        <input type="text"
+                               class="form-control"
+                               name="customer_phone"
+                               value="{{ cust.get('phone','') }}"
+                               placeholder="Ví dụ: 0901234567"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
+                               maxlength="10"
+                               oninput="this.value=this.value.replace(/[^0-9]/g,'');"
+                               required>
+
+
+                        {% if session.get('customer_err') %}
+                        <div class="text-danger mt-2" style="font-size:13px;">
+                            {{ session.pop('customer_err') }}
+                        </div>
+                        {% else %}
+                        <small class="text-muted">SDT bắt buộc để thanh toán</small>
+                        {% endif %}
+                    </div>
+
+                    <input type="hidden" name="page" value="{{ page }}">
+                </div>
+
+                <div class="modal-footer">
+                    <a class="btn btn-light" href="{{ url_for('pos_page', page=page) }}">Hủy</a>
+                    <button type="submit" class="btn btn-success">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% if open_pay_confirm %}
+<div class="modal-backdrop fade show"></div>
+<div class="modal fade show" tabindex="-1" role="dialog" style="display:block;">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content" style="border-radius:14px;">
+            <div class="modal-header">
+                <h5 class="modal-title">Thiếu thông tin khách hàng</h5>
+                <a class="close" aria-label="Close" href="{{ url_for('pos_page', page=page) }}">
+                    <span aria-hidden="true">&times;</span>
+                </a>
+            </div>
+            <div class="modal-body">
+                Chưa có <b>số điện thoại</b>. Bạn có muốn thêm để tiếp tục thanh toán không?
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-light" href="{{ url_for('pos_page', page=page) }}">Để sau</a>
+                <a class="btn btn-success"
+                   href="{{ url_for('pos_page', page=page, customer_modal=1) }}">
+                    Thêm SDT
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 </body>
 </html>

@@ -10,7 +10,7 @@ from models import (
     RoleEnum, TrangThaiEnum, LoaiDungEnum, TrangThaiHoaDonEnum,
     TrangThaiMonEnum, LoaiMonEnum, SizeEnum,
     TrangThaiThanhToanEnum, TrangThaiNguyenLieuEnum,
-    LoaiQREnum, TrangThaiQREnum
+    LoaiQREnum, TrangThaiQREnum, Topping, MonTopping, ChiTietHoaDonTopping
 )
 
 def seed_data():
@@ -78,6 +78,59 @@ def seed_data():
             Mon(name="Bánh phô mai", gia=48000, moTa="Cheesecake", trangThai=TrangThaiMonEnum.TAM_HET, image="cheesecake.jpg", loaiMon=LoaiMonEnum.BANH),
         ]
         db.session.add_all(mons)
+        db.session.commit()
+        # ======================
+        # TOPPING (6)
+        # ======================
+        toppings = [
+            Topping(name="Trân châu", code="TRAN_CHAU", price=5000),
+            Topping(name="Pudding", code="PUDDING", price=7000),
+            Topping(name="Kem cheese", code="KEM_CHEESE", price=10000),
+            Topping(name="Thạch cà phê", code="THACH_CF", price=6000),
+            Topping(name="Thạch trái cây", code="THACH_TC", price=6000),
+            Topping(name="Trân châu trắng", code="TRAN_CHAU_TRANG", price=5500),
+        ]
+        db.session.add_all(toppings)
+        db.session.commit()
+        # ======================
+        # MON - TOPPING (Mapping)
+        # ======================
+        mon_nuoc = [m for m in mons if m.loaiMon == LoaiMonEnum.NUOC]
+        mon_banh = [m for m in mons if m.loaiMon == LoaiMonEnum.BANH]
+
+        mon_toppings = []
+
+        for mon in mon_nuoc:
+            # tất cả món nước đều có trân châu + pudding
+            mon_toppings.append(
+                MonTopping(mon_id=mon.id, topping_id=toppings[0].id)  # TRAN_CHAU
+            )
+            mon_toppings.append(
+                MonTopping(mon_id=mon.id, topping_id=toppings[1].id)  # PUDDING
+            )
+
+        # riêng Matcha latte có kem cheese (giá override)
+        matcha = next((m for m in mon_nuoc if "Matcha" in m.name), None)
+        if matcha:
+            mon_toppings.append(
+                MonTopping(
+                    mon_id=matcha.id,
+                    topping_id=toppings[2].id,  # KEM_CHEESE
+                    override_price=9000
+                )
+            )
+
+        # bánh KHÔNG cho topping
+        for mon in mon_banh:
+            mon_toppings.append(
+                MonTopping(
+                    mon_id=mon.id,
+                    topping_id=toppings[0].id,
+                    is_allowed=False
+                )
+            )
+
+        db.session.add_all(mon_toppings)
         db.session.commit()
 
         # ======================
@@ -316,6 +369,43 @@ def seed_data():
             trangThai=TrangThaiEnum.ACTIVE
         )
         db.session.add(scheduler)
+        db.session.commit()
+        # ======================
+        # CHI TIẾT HÓA ĐƠN - TOPPING
+        # ======================
+        cthd_toppings = []
+
+        # chỉ gán topping cho CHI TIẾT MÓN NƯỚC
+        chi_tiet_nuoc = [
+            ct for ct in chi_tiets
+            if ct.mon.loaiMon == LoaiMonEnum.NUOC
+        ]
+
+        for i, ct in enumerate(chi_tiet_nuoc[:10]):  # lấy 10 dòng đầu để test
+            # mỗi dòng chọn 1–2 topping
+            t1 = toppings[i % len(toppings)]
+            cthd_toppings.append(
+                ChiTietHoaDonTopping(
+                    chi_tiet_hoa_don_id=ct.id,
+                    topping_id=t1.id,
+                    qty=1,
+                    price_at_time=t1.price
+                )
+            )
+
+            # dòng chẵn thì thêm topping thứ 2
+            if i % 2 == 0:
+                t2 = toppings[(i + 1) % len(toppings)]
+                cthd_toppings.append(
+                    ChiTietHoaDonTopping(
+                        chi_tiet_hoa_don_id=ct.id,
+                        topping_id=t2.id,
+                        qty=1,
+                        price_at_time=t2.price
+                    )
+                )
+
+        db.session.add_all(cthd_toppings)
         db.session.commit()
 
         # ======================

@@ -1,0 +1,76 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<div class="container-fluid mt-4">
+    
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2 class="text-primary">Bảng Điều Khiển (Dashboard)</h2>
+            <p class="text-muted">Chào mừng quay trở lại, <strong>{{ current_user.name }}</strong>!</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3 shadow">
+                <div class="card-header">Tổng Doanh Thu Tuần</div>
+                <div class="card-body">
+                    <h3 class="card-title">{{ "{:,.0f}".format(revenue) }} VNĐ</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info mb-3 shadow">
+                <div class="card-header">Đơn Hàng Mới</div>
+                <div class="card-body">
+                    <h3 class="card-title">125 Đơn</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-warning mb-3 shadow">
+                <div class="card-header">Cảnh Báo Kho</div>
+                <div class="card-body">
+                    <h3 class="card-title">Kiểm tra ngay!</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-white font-weight-bold">
+                    <i class="fa fa-bar-chart"></i> Biểu đồ doanh thu 7 ngày qua
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" width="400" height="150"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    var ctx = document.getElementById('revenueChart').getContext('2d');
+    var myChart = new Chart(ctx, {
+        type: 'bar', // Kiểu biểu đồ: 'bar' (cột), 'line' (đường)
+        data: {
+            labels: {{ labels | tojson }}, // Nhận từ Python
+            datasets: [{
+                label: 'Doanh thu (VNĐ)',
+                data: {{ data | tojson }}, // Nhận từ Python
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+</script>
+{% endblock %}

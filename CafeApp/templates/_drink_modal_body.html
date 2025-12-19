@@ -1,0 +1,200 @@
+{# NOTE:
+  - Dùng chung cho MENU và POS.
+  - Biến điều khiển:
+      ui_mode = "MENU" hoặc "POS"
+      close_url: url đóng modal (MENU: url_for('menu'), POS: '#'/JS)
+      form_action: url submit form (MENU: url_for('drink_config', mon_id=mon.id'), POS: '' hoặc '#')
+#}
+
+<style>
+  .pill input{ display:none; }
+  .pill{ cursor:pointer; }
+  .pill input:checked + span{
+    background: #0d6efd;
+    color: #fff;
+    border-color: #0d6efd;
+  }
+</style>
+
+{% if ui_mode == "MENU" %}
+<style>
+  .modal-backdrop-fake{
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 1040;
+  }
+  .modal-card-fake{
+    position: fixed;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, 94vw);
+    max-height: 88vh;
+    overflow: auto;
+    z-index: 1050;
+    border-radius: 16px;
+  }
+</style>
+<div class="modal-backdrop-fake"></div>
+<div class="bg-white shadow modal-card-fake p-3">
+{% else %}
+<div class="modal-content p-3">
+{% endif %}
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    {% if ui_mode == "MENU" %}
+      <a href="{{ close_url }}" class="btn btn-sm btn-light">×</a>
+    {% else %}
+      <button type="button" class="btn btn-sm btn-light" data-dismiss="modal">×</button>
+    {% endif %}
+    <div class="fw-semibold">Thêm vào giỏ</div>
+    <div style="width:34px;"></div>
+  </div>
+
+  <div class="mb-2">
+    <div class="fw-bold fs-4">{{ mon.name }}</div>
+    <div class="text-danger fw-semibold">{{ "{:,.0f}".format(mon.gia) }}đ</div>
+    <div class="text-muted">{{ mon.moTa or "" }}</div>
+  </div>
+
+  <form
+      {% if ui_mode == "MENU" %}
+        method="post" action="{{ form_action }}"
+      {% else %}
+        id="posDrinkForm" data-mon-id="{{ mon.id }}"
+      {% endif %}
+  >
+  <input type="hidden" name="next" value="{{ next_url }}">
+    {# POS dùng để edit 1 dòng #}
+    {% if ui_mode == "POS" %}
+      <input type="hidden" name="line_id" value="{{ line_id or '' }}">
+    {% endif %}
+
+    {# MENU dùng để edit cart theo key #}
+    {% if edit_key %}
+      <input type="hidden" name="edit_key" value="{{ edit_key or '' }}">
+    {% endif %}
+
+    <input type="hidden" name="mode" value="recalc">
+
+    <!-- SIZE -->
+    <div class="mt-3">
+      <div class="fw-semibold">Chọn size</div>
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        {% for code,label,delta in SIZE_OPTS %}
+        <label class="pill">
+          <input type="radio" name="size" value="{{ code }}"
+                 {% if form.size==code %}checked{% endif %}
+                 {% if ui_mode=="MENU" %}onchange="this.form.submit()"{% endif %}>
+          <span class="btn btn-outline-secondary rounded-pill">
+            {{ label }}{% if delta>0 %} (+{{ "{:,.0f}".format(delta) }}đ){% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="small text-muted mt-1">Mặc định: Size S</div>
+    </div>
+
+    <!-- ĐÁ -->
+    <div class="mt-3">
+      <div class="fw-semibold">Lượng đá</div>
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        {% for v,label in ICE_OPTS %}
+        <label class="pill">
+          <input type="radio" name="da" value="{{ v }}"
+                 {% if form.da==v %}checked{% endif %}
+                 {% if ui_mode=="MENU" %}onchange="this.form.submit()"{% endif %}>
+          <span class="btn btn-outline-secondary rounded-pill">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="small text-muted mt-1">Mặc định: 70% đá</div>
+    </div>
+
+    <!-- ĐƯỜNG -->
+    <div class="mt-3">
+      <div class="fw-semibold">Độ ngọt</div>
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        {% for v,label in SUGAR_OPTS %}
+        <label class="pill">
+          <input type="radio" name="duong" value="{{ v }}"
+                 {% if form.duong==v %}checked{% endif %}
+                 {% if ui_mode=="MENU" %}onchange="this.form.submit()"{% endif %}>
+          <span class="btn btn-outline-secondary rounded-pill">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="small text-muted mt-1">Mặc định: 70% đường</div>
+    </div>
+
+    <!-- TOPPING -->
+    <div class="mt-3">
+      <div class="fw-semibold">Topping</div>
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        {% if TOPPING_OPTS and TOPPING_OPTS|length > 0 %}
+          {% for code,label,price in TOPPING_OPTS %}
+          <label class="pill">
+            <input type="checkbox" name="topping" value="{{ code }}"
+                   {% if code in form.topping %}checked{% endif %}
+                   {% if ui_mode=="MENU" %}onchange="this.form.submit()"{% endif %}>
+            <span class="btn btn-outline-secondary rounded-pill">
+              {{ label }} (+{{ "{:,.0f}".format(price) }}đ)
+            </span>
+          </label>
+          {% endfor %}
+        {% else %}
+          <div class="text-muted small">Món này không có topping.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- GHI CHÚ -->
+    <div class="mt-3">
+      <div class="fw-semibold">Ghi chú</div>
+      <textarea name="note" class="form-control" rows="2"
+                placeholder="Ví dụ: ít đá, không béo...">{{ form.note }}</textarea>
+    </div>
+
+    <!-- SỐ LƯỢNG -->
+    <div class="mt-3">
+      <div class="fw-semibold">Số lượng</div>
+      {% if errors and errors.get('quantity') %}
+        <div class="text-danger small">{{ errors.get('quantity') }}</div>
+      {% endif %}
+      <input name="quantity" class="form-control" value="{{ form.quantity }}">
+      {% if ui_mode == "POS" %}
+        <small class="text-danger" id="posQtyErr" style="display:none;">Số lượng không hợp lệ</small>
+      {% endif %}
+    </div>
+
+    <!-- NÚT -->
+    <div class="mt-4">
+      {% if ui_mode == "MENU" %}
+        <button name="action" value="add" type="submit"
+                class="btn btn-danger w-100 fw-bold rounded-pill">
+          THÊM VÀO GIỎ - {{ "{:,.0f}".format(total_price) }}đ
+        </button>
+      {% else %}
+        <button type="button" id="posConfirmAdd"
+                class="btn btn-danger w-100 fw-bold rounded-pill">
+          THÊM - {{ "{:,.0f}".format(total_price) }}đ
+        </button>
+      {% endif %}
+    </div>
+
+    {% if ui_mode == "POS" %}
+      <div class="mt-3 d-flex justify-content-between align-items-center">
+        <div class="text-muted small">Đơn giá</div>
+        <div class="fw-bold" id="posUnitPrice">{{ "{:,.0f}".format(unit_price) }}đ</div>
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted small">Tạm tính</div>
+        <div class="fw-bold text-danger" id="posTotalPrice">{{ "{:,.0f}".format(total_price) }}đ</div>
+      </div>
+    {% endif %}
+  </form>
+
+{% if ui_mode == "MENU" %}
+</div>
+{% else %}
+</div>
+{% endif %}

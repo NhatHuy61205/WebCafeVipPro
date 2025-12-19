@@ -1,16 +1,44 @@
 import datetime
+import math
 import re
 from functools import wraps
 import urllib.parse
-from flask_login import LoginManager, login_user, current_user, login_required, logout_user
+from typing import Optional
 
+from flask_login import LoginManager, login_user, current_user, login_required, logout_user
 from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang
 from CafeApp.models import LoaiDungEnum, TrangThaiHoaDonEnum, SizeEnum
 from CafeApp.models import LoaiMonEnum
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash
-from CafeApp import app, db, BANK_ACQ_ID, BANK_ACCOUNT_NO, BANK_ACCOUNT_NAME, dao, login
-from CafeApp.dao import build_drink
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash, current_app
+from CafeApp import app, db, BANK_ACQ_ID, BANK_ACCOUNT_NO, BANK_ACCOUNT_NAME, dao, login, PAGE_SIZE, MAX_CART_ITEMS, \
+    PHONE_RE
+from CafeApp.dao import build_drink, normalize_topping_codes, get_drink_static_opts, get_topping_opts_for_mon, \
+    upsert_hoa_don_from_pos_cart
 from urllib.parse import quote, unquote
+
+
+def cart_too_many(cart: dict, max_items: int = MAX_CART_ITEMS) -> bool:
+    return len(cart) >= max_items
+
+
+def check_cart_limit_or_redirect(
+        cart: dict,
+        option_key: str,
+        redirect_endpoint: str = "pos_page",
+        redirect_kwargs: Optional[dict] = None,
+        message: str = "Quá số lượng món trên hóa đơn (tối đa 10 món khác nhau).",
+        edit_key: Optional[str] = None,
+):
+    if redirect_kwargs is None:
+        redirect_kwargs = {}
+
+    effective_len = len(cart) - (1 if (edit_key and edit_key in cart) else 0)
+
+    if option_key not in cart and effective_len >= MAX_CART_ITEMS:
+        flash(message, category="warning")
+        return redirect(url_for(redirect_endpoint, **redirect_kwargs))
+
+    return None
 
 
 def block_when_checkout(func):
@@ -25,15 +53,40 @@ def block_when_checkout(func):
 
 @app.route("/")
 def index():
-    ds_mon = Mon.query.all()
-    return render_template("index.html", items=ds_mon)
+    page = request.args.get("page", 1, type=int)
+    PAGE_SIZE = 10
+
+    base_q = Mon.query.filter(Mon.trangThai == "DANG_BAN")
+
+    total_items = base_q.count()
+    pages = max(1, math.ceil(total_items / PAGE_SIZE))
+
+    if page < 1:
+        page = 1
+    if page > pages:
+        page = pages
+
+    items = (
+        base_q
+        .order_by(Mon.id.desc())
+        .offset((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .all()
+    )
+
+    return render_template(
+        "index.html",
+        items=items,
+        page=page,
+        pages=pages
+    )
 
 
 @app.route("/login", methods=["GET", "POST"], endpoint="login")
 def login_my_user():
     print("== HIT /login ==", request.method)  # <-- thêm
     if request.method == "POST":
-        print("FORM =", dict(request.form))    # <-- thêm
+        print("FORM =", dict(request.form))  # <-- thêm
 
     if current_user.is_authenticated:
         role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
@@ -51,7 +104,7 @@ def login_my_user():
         password = request.form.get("password")
 
         user = dao.auth_user(username, password)
-        print("AUTH USER =", bool(user))        # <-- thêm
+        print("AUTH USER =", bool(user))  # <-- thêm
 
         if user:
             login_user(user)
@@ -94,14 +147,13 @@ def admin_login_process():
     return redirect(url_for("login_my_user"))
 
 
-from flask_login import login_required
-
 @app.route("/logout", endpoint="logout")
 @login_required
 def logout():
     logout_user()
     session.clear()
     return redirect(url_for("login"))
+
 
 @app.route("/drink/<int:mon_id>", methods=["GET", "POST"])
 def drink_config(mon_id):
@@ -110,21 +162,14 @@ def drink_config(mon_id):
     if mon.loaiMon != LoaiMonEnum.NUOC:
         return redirect(url_for("menu"))
 
-    SIZE_OPTS = [("S", "Nhỏ", 0), ("M", "Vừa", 5000), ("L", "Lớn", 10000)]
-    SUGAR_OPTS = [("0", "0%"), ("30", "30%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
-    ICE_OPTS = [("0", "0%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
-    TOPPING_OPTS = [
-        ("TRAN_CHAU", "Trân châu", 5000),
-        ("PUDDING", "Pudding", 7000),
-        ("KEM_CHEESE", "Kem cheese", 10000)
-    ]
+    SIZE_OPTS, SUGAR_OPTS, ICE_OPTS = get_drink_static_opts()
+    TOPPING_OPTS = get_topping_opts_for_mon(mon)
 
     # ====== GET ======
     if request.method == "GET":
         cart = session.get("cart", {})
         edit_key = (request.args.get("edit_key") or "").strip()
 
-        # mặc định
         form = {
             "size": "S",
             "duong": "70",
@@ -134,11 +179,9 @@ def drink_config(mon_id):
             "quantity": "1"
         }
 
-
         if edit_key and edit_key in cart:
             old = cart.get(edit_key, {})
             opts = old.get("options", {}) or {}
-
             form = {
                 "size": (opts.get("size") or "S"),
                 "duong": str(opts.get("duong") or "70"),
@@ -148,13 +191,15 @@ def drink_config(mon_id):
                 "quantity": str(old.get("quantity") or 1)
             }
 
+        form["topping"] = normalize_topping_codes(form.get("topping", []), TOPPING_OPTS)
+
         unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
         try:
             qty = int(form["quantity"])
         except:
             qty = 1
         total_price = unit_price * max(qty, 1)
-
+        next_url = (request.args.get("next") or url_for("menu"))
         return render_template(
             "drink_modal.html",
             mon=mon,
@@ -167,7 +212,8 @@ def drink_config(mon_id):
             SUGAR_OPTS=SUGAR_OPTS,
             ICE_OPTS=ICE_OPTS,
             TOPPING_OPTS=TOPPING_OPTS,
-            edit_key=edit_key or None
+            edit_key=edit_key or None,
+            next_url=next_url
         )
 
     # ====== POST ======
@@ -178,6 +224,8 @@ def drink_config(mon_id):
     note = (request.form.get("note") or "").strip()
     qty_raw = (request.form.get("quantity") or "1").strip()
     edit_key = (request.form.get("edit_key") or "").strip()
+    next_url = (request.form.get("next") or url_for("menu"))
+    topping = normalize_topping_codes(topping, TOPPING_OPTS)
 
     errors = {}
     try:
@@ -213,17 +261,26 @@ def drink_config(mon_id):
             SUGAR_OPTS=SUGAR_OPTS,
             ICE_OPTS=ICE_OPTS,
             TOPPING_OPTS=TOPPING_OPTS,
-            edit_key=edit_key or None
+            edit_key=edit_key or None,
+            next_url=next_url
         )
 
     option_key = f"{mon.id}|{size}|{duong}|{da}|{','.join(sorted(topping))}|{note}"
+    cart = session.get("cart", {}) or {}
 
-    cart = session.get("cart", {})
+    resp = check_cart_limit_or_redirect(
+        cart=cart,  # dùng cart thật
+        option_key=option_key,
+        redirect_endpoint="menu",
+        redirect_kwargs={},  # nếu cần giữ page: {"page": page}
+        message="Giỏ hàng chỉ tối đa 10 món khác nhau.",
+        edit_key=edit_key  # QUAN TRỌNG
+    )
+    if resp:
+        flash("Giỏ hàng chỉ tối đa 10 món khác nhau.", "warning")
+        return redirect(next_url)
 
-    effective_len = len(cart) - (1 if (edit_key and edit_key in cart) else 0)
-    if option_key not in cart and effective_len >= MAX_CART_ITEMS:
-        return redirect(url_for("menu"))
-
+    # nếu qua được check thì mới pop edit_key và add/update
     if edit_key and edit_key in cart:
         cart.pop(edit_key, None)
 
@@ -247,13 +304,14 @@ def drink_config(mon_id):
 
     session["cart"] = cart
     session.modified = True
-    return redirect(url_for("menu"))
+    return redirect(next_url or url_for("menu"))
 
 
 @app.route("/drink/edit/<path:cart_key>", methods=["GET"])
 def drink_edit(cart_key):
     cart = get_cart()
     cart_key = unquote(cart_key)
+    next_url = (request.args.get("next") or url_for("menu"))
 
     if cart_key not in cart:
         return redirect(url_for("menu"))
@@ -261,11 +319,9 @@ def drink_edit(cart_key):
     item = cart[cart_key]
     mon = Mon.query.get_or_404(item["id"])
 
-    # chỉ edit món nước
     if mon.loaiMon != LoaiMonEnum.NUOC:
         return redirect(url_for("menu"))
 
-    # form lấy từ options cũ
     opt = item.get("options", {})
     form = {
         "size": opt.get("size", "S"),
@@ -276,16 +332,13 @@ def drink_edit(cart_key):
         "quantity": str(item.get("quantity", 1))
     }
 
+    SIZE_OPTS, SUGAR_OPTS, ICE_OPTS = get_drink_static_opts()
+    TOPPING_OPTS = get_topping_opts_for_mon(mon)
+
+    form["topping"] = normalize_topping_codes(form["topping"], TOPPING_OPTS)
+
     unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
     total_price = unit_price * int(form["quantity"] or 1)
-
-    # options list như bạn đang dùng
-    SIZE_OPTS = [("S", "Nhỏ", 0), ("M", "Vừa", 5000), ("L", "Lớn", 10000)]
-    SUGAR_OPTS = [("0", "0%"), ("30", "30%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
-    ICE_OPTS = [("0", "0%"), ("50", "50%"), ("70", "70%"), ("100", "100%")]
-    TOPPING_OPTS = [("TRAN_CHAU", "Trân châu", 5000),
-                    ("PUDDING", "Pudding", 7000),
-                    ("KEM_CHEESE", "Kem cheese", 10000)]
 
     return render_template(
         "drink_modal.html",
@@ -299,7 +352,8 @@ def drink_edit(cart_key):
         SUGAR_OPTS=SUGAR_OPTS,
         ICE_OPTS=ICE_OPTS,
         TOPPING_OPTS=TOPPING_OPTS,
-        edit_key=cart_key
+        edit_key=cart_key,
+        next_url=next_url
     )
 
 
@@ -321,12 +375,31 @@ def cart_stats(cart):
     return total_qty, total_amount
 
 
+# ==== Menu Khách Online
+
 @app.route("/menu", methods=["GET"])
 def menu():
-    items = Mon.query.filter(Mon.trangThai == "DANG_BAN").all()
+    # ===== Pagination =====
+    page = request.args.get("page", 1, type=int)
+    PAGE_SIZE = 10
+
+    base_q = Mon.query.filter(Mon.trangThai == "DANG_BAN")
+
+    total_items = base_q.count()
+    pages = max(1, math.ceil(total_items / PAGE_SIZE))
+
+    if page < 1:
+        page = 1
+    if page > pages:
+        page = pages
+
+    items = (base_q
+             .order_by(Mon.id.desc())
+             .offset((page - 1) * PAGE_SIZE)
+             .limit(PAGE_SIZE)
+             .all())
 
     cart = get_cart()
-
 
     if not cart:
         session.pop("checkout_mode", None)
@@ -341,6 +414,9 @@ def menu():
     return render_template(
         "menu.html",
         items=items,
+        page=page,
+        pages=pages,
+
         cart=cart,
         total_qty=total_qty,
         total_amount=total_amount,
@@ -354,14 +430,9 @@ def menu():
     )
 
 
+# ==== Giỏ hàng của khách Online
 
-MAX_CART_ITEMS = 10
-
-def cart_too_many(cart: dict) -> bool:
-    return len(cart.keys()) >= MAX_CART_ITEMS
-
-
-@app.route("/cart/add", methods=['POST'])
+@app.route("/cart/add", methods=["POST"])
 @block_when_checkout
 def cart_add():
     mon_id = int(request.form.get("mon_id", 0))
@@ -379,11 +450,19 @@ def cart_add():
     if not mon:
         return redirect(url_for("menu"))
 
-    cart = get_cart()
+    cart = get_cart() or {}
     key = str(mon_id)
 
-    if key not in cart and len(cart) >= MAX_CART_ITEMS:
-        return redirect(url_for("menu"))
+    resp = check_cart_limit_or_redirect(
+        cart=cart,
+        option_key=key,
+        redirect_endpoint="menu",
+        redirect_kwargs={},  # nếu cần giữ page: {"page": page}
+        message="Giỏ hàng chỉ tối đa 10 món khác nhau.",
+        edit_key=None
+    )
+    if resp:
+        return resp
 
     if key not in cart:
         cart[key] = {
@@ -392,12 +471,12 @@ def cart_add():
             "price": float(mon.gia),
             "image": mon.image or "",
             "quantity": 0,
-            "options": {}  # để đồng bộ cấu trúc
+            "options": {}
         }
 
     cart[key]["quantity"] += qty
     save_cart(cart)
-    return redirect(url_for("menu"))
+    return redirect(request.referrer or url_for("menu"))
 
 
 @app.route("/cart/inc", methods=['POST'])
@@ -410,7 +489,7 @@ def cart_inc():
         cart[key]["quantity"] += 1
         save_cart(cart)
 
-    return redirect(url_for("menu"))
+    return redirect(request.referrer or url_for("menu"))
 
 
 @app.route("/cart/dec", methods=['POST'])
@@ -425,7 +504,7 @@ def cart_dec():
             cart.pop(key, None)
         save_cart(cart)
 
-    return redirect(url_for("menu"))
+    return redirect(request.referrer or url_for("menu"))
 
 
 @app.route("/cart/update", methods=['POST'])
@@ -448,7 +527,7 @@ def cart_update():
 
         save_cart(cart)
 
-    return redirect(url_for("menu"))
+    return redirect(request.referrer or url_for("menu"))
 
 
 @app.route("/cart/remove", methods=['POST'])
@@ -458,7 +537,7 @@ def cart_remove():
     cart = get_cart()
     cart.pop(key, None)
     save_cart(cart)
-    return redirect(url_for("menu"))
+    return redirect(request.referrer or url_for("menu"))
 
 
 @app.route("/cart/clear", methods=["POST"])
@@ -466,7 +545,10 @@ def cart_clear():
     session.pop("cart", None)
     session.pop("checkout_mode", None)
     session.modified = True
-    return redirect(url_for("menu"))
+    return redirect(request.referrer or url_for("menu"))
+
+
+# Thanh Toán - Khách Hàng Online
 
 @app.route("/checkout", methods=["GET", "POST"])
 def checkout():
@@ -523,7 +605,7 @@ def checkout():
 
             # ===== 3) tạo hóa đơn CHỜ THANH TOÁN =====
             hd = HoaDon(
-                name="HD",  # ✅ tạm để qua NOT NULL, lát set lại theo id
+                name="HD",
                 ngayThanhToan=None,
                 soBan=None,
                 tongTienHang=float(total_amount),
@@ -599,7 +681,6 @@ def checkout():
     )
 
 
-
 @app.route("/checkout/start", methods=["POST"])
 def checkout_start():
     session["checkout_mode"] = True
@@ -620,7 +701,7 @@ def checkout_done():
     return render_template("checkout_done.html")
 
 
-
+# ===== Thanh Toán QR Code Tự Động - Webhook
 
 @app.route("/webhook/sepay", methods=["POST"])
 def sepay_webhook():
@@ -689,6 +770,8 @@ def sepay_webhook():
 
 
 VIETQR_TEMPLATE_ID = "akGFPiZ"
+
+
 def vietqr_quicklink(amount: int, add_info: str) -> str:
     add_info = urllib.parse.quote(add_info)
     return (
@@ -725,6 +808,7 @@ def payment_status(hoa_don_id):
         "status": hd.trangThai.value
     })
 
+
 @app.route("/payment/success/<int:hoa_don_id>")
 def payment_success(hoa_don_id):
     hd = HoaDon.query.get_or_404(hoa_don_id)
@@ -736,8 +820,6 @@ def register():
     return render_template("register.html")
 
 
-
-
 @app.route("/admin")
 def admin_dashboard():
     # Kiểm tra quyền Admin
@@ -746,10 +828,13 @@ def admin_dashboard():
 
     return render_template("admin/dashboard.html")
 
+
 @login.user_loader
 def load_user(user_id):
     return NhanVienCuaHang.query.get(int(user_id))
 
+
+# ====== NHÂN VIÊN - POS
 
 @app.route("/pos")
 @login_required
@@ -757,8 +842,456 @@ def pos_page():
     role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
     if role_str != "NHAN_VIEN":
         return redirect(url_for("login_my_user"))
-    ds_mon = Mon.query.all()
-    return render_template("pos.html", ds_mon=ds_mon)
+
+    # ===== PHÂN TRANG =====
+    page = request.args.get("page", 1, type=int)
+
+    pagination = Mon.query.paginate(
+        page=page,
+        per_page=PAGE_SIZE,
+        error_out=False
+    )
+
+    items = pagination.items
+    pages = pagination.pages
+
+    # ===== GIỎ POS =====
+    pos_cart = session.get("pos_cart", {}) or {}
+
+    # ===== MODAL OVERLAY (nếu có mon_id) =====
+    mon_id = request.args.get("mon_id", type=int)
+    edit_key = (request.args.get("edit_key") or "").strip()
+    modal_ctx = None
+
+    if mon_id:
+        mon = Mon.query.get_or_404(mon_id)
+        if mon.loaiMon != LoaiMonEnum.NUOC:
+            pos_cart = session.get("pos_cart", {}) or {}
+
+            option_key = f"{mon.id}|NOOPT"
+
+            resp = check_cart_limit_or_redirect(
+                cart=pos_cart,
+                option_key=option_key,
+                redirect_endpoint="pos_page",
+                redirect_kwargs={"page": page},
+                message="Quá số lượng món trên hóa đơn (tối đa 10 món khác nhau).",
+                edit_key=None
+            )
+            if resp:
+                return resp
+
+            if option_key not in pos_cart:
+                pos_cart[option_key] = {
+                    "id": mon.id,
+                    "name": mon.name,
+                    "price": float(mon.gia),
+                    "quantity": 0,
+                    "options": {
+                        "desc": [],
+                        "note": ""
+                    }
+                }
+
+            pos_cart[option_key]["quantity"] += 1
+            session["pos_cart"] = pos_cart
+            session.modified = True
+
+            return redirect(url_for("pos_page", page=page))
+        if mon.loaiMon == LoaiMonEnum.NUOC:
+            SIZE_OPTS, SUGAR_OPTS, ICE_OPTS = get_drink_static_opts()
+            TOPPING_OPTS = get_topping_opts_for_mon(mon)
+
+            form = {
+                "size": "S",
+                "duong": "70",
+                "da": "70",
+                "topping": [],
+                "note": "",
+                "quantity": "1"
+            }
+
+            if edit_key and edit_key in pos_cart:
+                old = pos_cart[edit_key]
+                opts = old.get("options", {}) or {}
+                form = {
+                    "size": opts.get("size", "S"),
+                    "duong": str(opts.get("duong", "70")),
+                    "da": str(opts.get("da", "70")),
+                    "topping": opts.get("topping", []),
+                    "note": opts.get("note", ""),
+                    "quantity": str(old.get("quantity", 1))
+                }
+
+            form["topping"] = normalize_topping_codes(form["topping"], TOPPING_OPTS)
+
+            unit_price, desc_list = build_drink(
+                mon, form["size"], form["duong"], form["da"], form["topping"]
+            )
+            qty = int(form["quantity"] or 1)
+            total_price = unit_price * qty
+
+            modal_ctx = dict(
+                mon=mon,
+                form=form,
+                errors={},
+                unit_price=unit_price,
+                total_price=total_price,
+                desc_list=desc_list,
+                SIZE_OPTS=SIZE_OPTS,
+                SUGAR_OPTS=SUGAR_OPTS,
+                ICE_OPTS=ICE_OPTS,
+                TOPPING_OPTS=TOPPING_OPTS,
+                edit_key=edit_key or None,
+                ui_mode="MENU",
+                close_url=url_for("pos_page", page=page),
+                form_action=url_for("pos_drink_config", mon_id=mon.id)
+            )
+
+    return render_template("pos.html", items=items, pos_cart=pos_cart, modal_ctx=modal_ctx, page=page, pages=pages)
+
+
+def get_pos_cart():
+    return session.get("pos_cart", {}) or {}
+
+
+def save_pos_cart(cart: dict):
+    session["pos_cart"] = cart
+    session.modified = True
+
+
+@app.route("/pos/drink/<int:mon_id>", methods=["GET", "POST"])
+@login_required
+def pos_drink_config(mon_id):
+    mon = Mon.query.get_or_404(mon_id)
+
+    if mon.loaiMon != LoaiMonEnum.NUOC:
+
+        cart = get_pos_cart()
+        option_key = f"{mon.id}|S|70|70||"
+
+        resp = check_cart_limit_or_redirect(
+            cart=cart,
+            option_key=option_key,
+            redirect_endpoint="pos_page",
+            redirect_kwargs={},  # nếu bạn muốn giữ page thì truyền {"page": request.args.get("page", 1, type=int)}
+            message="Quá số lượng món trên hóa đơn (tối đa 10 món khác nhau).",
+            edit_key=None
+        )
+        if resp:
+            return resp
+
+        if option_key not in cart:
+            cart[option_key] = {
+                "id": mon.id,
+                "name": mon.name,
+                "price": float(mon.gia),
+                "quantity": 0,
+                "options": {
+                    "size": "S",
+                    "duong": "70",
+                    "da": "70",
+                    "topping": [],
+                    "note": "",
+                    "desc": []
+                }
+            }
+        cart[option_key]["quantity"] += 1
+        save_pos_cart(cart)
+        return redirect(url_for("pos_page"))
+
+    SIZE_OPTS, SUGAR_OPTS, ICE_OPTS = get_drink_static_opts()
+    TOPPING_OPTS = get_topping_opts_for_mon(mon)
+
+    # ====== GET ======
+    if request.method == "GET":
+        cart = get_pos_cart()
+        edit_key = (request.args.get("edit_key") or "").strip()
+
+        form = {"size": "S", "duong": "70", "da": "70", "topping": [], "note": "", "quantity": "1"}
+
+        if edit_key and edit_key in cart:
+            old = cart.get(edit_key, {})
+            opts = old.get("options", {}) or {}
+            form = {
+                "size": (opts.get("size") or "S"),
+                "duong": str(opts.get("duong") or "70"),
+                "da": str(opts.get("da") or "70"),
+                "topping": opts.get("topping") or [],
+                "note": opts.get("note") or "",
+                "quantity": str(old.get("quantity") or 1)
+            }
+
+        form["topping"] = normalize_topping_codes(form.get("topping", []), TOPPING_OPTS)
+
+        unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
+        try:
+            qty = int(form["quantity"])
+        except:
+            qty = 1
+        total_price = unit_price * max(qty, 1)
+
+        # dùng wrapper drink_modal.html nhưng close_url quay về /pos
+        return render_template(
+            "drink_modal.html",
+            mon=mon,
+            form=form,
+            errors={},
+            unit_price=unit_price,
+            total_price=total_price,
+            desc_list=desc_list,
+            SIZE_OPTS=SIZE_OPTS,
+            SUGAR_OPTS=SUGAR_OPTS,
+            ICE_OPTS=ICE_OPTS,
+            TOPPING_OPTS=TOPPING_OPTS,
+            edit_key=edit_key or None,
+
+            # override cho wrapper
+            close_url=url_for("pos_page"),
+            form_action=url_for("pos_drink_config", mon_id=mon.id),
+            ui_mode="MENU"  # vẫn dùng mode MENU (submit form) để khỏi JS
+        )
+
+    # ====== POST ======
+    size = (request.form.get("size") or "S").strip()
+    duong = (request.form.get("duong") or "70").strip()
+    da = (request.form.get("da") or "70").strip()
+    topping = request.form.getlist("topping")
+    note = (request.form.get("note") or "").strip()
+    qty_raw = (request.form.get("quantity") or "1").strip()
+    edit_key = (request.form.get("edit_key") or "").strip()
+
+    topping = normalize_topping_codes(topping, TOPPING_OPTS)
+
+    errors = {}
+    try:
+        qty = int(qty_raw)
+        if qty < 1:
+            raise ValueError()
+    except:
+        errors["quantity"] = "Số lượng không hợp lệ."
+        qty = 1
+
+    unit_price, desc_list = build_drink(mon, size, duong, da, topping)
+    total_price = unit_price * qty
+
+    action = (request.form.get("action") or "").strip()
+
+    if action != "add" or errors:
+        form = {"size": size, "duong": duong, "da": da, "topping": topping, "note": note, "quantity": qty_raw}
+        return render_template(
+            "drink_modal.html",
+            mon=mon,
+            form=form,
+            errors=errors,
+            unit_price=unit_price,
+            total_price=total_price,
+            desc_list=desc_list,
+            SIZE_OPTS=SIZE_OPTS,
+            SUGAR_OPTS=SUGAR_OPTS,
+            ICE_OPTS=ICE_OPTS,
+            TOPPING_OPTS=TOPPING_OPTS,
+            edit_key=edit_key or None,
+            close_url=url_for("pos_page"),
+            form_action=url_for("pos_drink_config", mon_id=mon.id),
+            ui_mode="MENU"
+        )
+
+    option_key = f"{mon.id}|{size}|{duong}|{da}|{','.join(sorted(topping))}|{note}"
+    cart = get_pos_cart() or {}
+
+    resp = check_cart_limit_or_redirect(
+        cart=cart,
+        option_key=option_key,
+        redirect_endpoint="pos_page",
+        redirect_kwargs={},
+        message="Quá số lượng món trên hóa đơn (tối đa 10 món khác nhau).",
+        edit_key=edit_key
+    )
+    if resp:
+        return resp
+
+    if edit_key and edit_key in cart:
+        cart.pop(edit_key, None)
+
+    if option_key not in cart:
+        cart[option_key] = {
+            "id": mon.id,
+            "name": mon.name,
+            "price": unit_price,
+            "quantity": 0,
+            "options": {
+                "size": size,
+                "duong": duong,
+                "da": da,
+                "topping": topping,
+                "note": note,
+                "desc": desc_list
+            }
+        }
+
+    cart[option_key]["quantity"] += qty
+    save_pos_cart(cart)
+    return redirect(url_for("pos_page"))
+
+
+@app.route("/pos/cart/inc/<path:key>", methods=["POST"])
+@login_required
+def pos_cart_inc(key):
+    key = unquote(key)
+    cart = session.get("pos_cart", {}) or {}
+    if key in cart:
+        cart[key]["quantity"] = int(cart[key].get("quantity", 0)) + 1
+        session["pos_cart"] = cart
+        session.modified = True
+
+    page = request.form.get("page", type=int) or 1
+    return redirect(url_for("pos_page", page=page))
+
+
+@app.route("/pos/cart/dec/<path:key>", methods=["POST"])
+@login_required
+def pos_cart_dec(key):
+    key = unquote(key)
+    cart = session.get("pos_cart", {}) or {}
+    if key in cart:
+        q = int(cart[key].get("quantity", 0)) - 1
+        if q <= 0:
+            cart.pop(key, None)
+        else:
+            cart[key]["quantity"] = q
+        session["pos_cart"] = cart
+        session.modified = True
+
+    page = request.form.get("page", type=int) or 1
+    return redirect(url_for("pos_page", page=page))
+
+
+@app.route("/pos/cart/clear", methods=["POST"])
+@login_required
+def pos_cart_clear():
+    session.pop("pos_cart", None)
+    session.modified = True
+    return redirect(url_for("pos_page"))
+
+
+@app.route("/pos/cart/remove/<path:key>", methods=["POST"])
+@login_required
+def pos_cart_remove(key):
+    key = unquote(key)
+    cart = session.get("pos_cart", {}) or {}
+    cart.pop(key, None)
+    session["pos_cart"] = cart
+    session.modified = True
+
+    page = request.form.get("page", type=int) or 1
+    return redirect(url_for("pos_page", page=page))
+
+
+@app.post("/pos/customer/save")
+def pos_customer_save():
+    name = (request.form.get("customer_name") or "").strip()
+    phone = (request.form.get("customer_phone") or "").strip().replace(" ", "")
+    page = request.form.get("page", 1)
+
+    if not PHONE_RE.match(phone):
+        session["customer_err"] = "Vui lòng nhập số điện thoại hợp lệ (10 số, bắt đầu bằng 0)."
+        return redirect(url_for("pos_page", page=page, customer_modal=1))
+
+    session["pos_customer"] = {"name": name, "phone": phone}
+    session.modified = True
+    return redirect(url_for("pos_page", page=page))
+
+
+@app.post("/pos/customer/clear")
+def pos_customer_clear():
+    page = request.form.get("page", 1)
+    session.pop("pos_customer", None)
+    session.modified = True
+    return redirect(url_for("pos_page", page=page))
+
+
+@app.route("/pos/service-fee", methods=["POST"])
+@login_required
+def pos_set_service_fee():
+    v = (request.form.get("service_percent", "0") or "0").strip()
+
+    try:
+        # chỉ cho 0..100
+        percent = float(v)
+        if percent < 0:
+            percent = 0
+        if percent > 100:
+            percent = 100
+    except:
+        percent = 0
+
+    session["pos_service_percent"] = percent
+    session.modified = True
+
+    return redirect(url_for("pos_page"))
+
+
+@app.route("/pos/print-temp")
+@login_required
+def pos_print_temp():
+    hd, payload = upsert_hoa_don_from_pos_cart(
+        TrangThaiHoaDonEnum.CHO_THANH_TOAN,
+        rebuild_details=True
+    )
+    if not hd:
+        return render_template("pos_print_temp.html", empty_cart=True)
+
+    items, meta = payload
+
+    khach = KhachHang.query.get(hd.khachHang_id) if hd.khachHang_id else None
+
+    meta.pop("khach", None)
+    return render_template(
+        "pos_print_temp.html",
+        empty_cart=False,
+        bill=hd,
+        items=items,
+        khach=khach,
+        **meta
+    )
+
+
+@app.route("/pos/pay", methods=["POST"])
+@login_required
+def pos_pay():
+    hd, payload = upsert_hoa_don_from_pos_cart(
+        TrangThaiHoaDonEnum.DA_THANH_TOAN,
+        rebuild_details=False  # thường không cần rebuild lúc pay (trừ khi bạn cho sửa phút chót)
+    )
+    if not hd:
+        return redirect(url_for("pos_page"))
+
+    items, meta = payload
+
+    # Tạm thời dùng chung template cho dễ; sau này bạn đổi sang pos_print_paid.html
+    return render_template(
+        "pos_print_temp.html",  # đổi sau: "pos_print_paid.html"
+        empty_cart=False,
+        bill=hd,
+        items=items,
+        **meta
+    )
+
+
+@app.route("/orders/history")
+@login_required
+def order_history():
+    return render_template("order_history.html")
+
+
+@app.route('/check-in', methods=['GET', 'POST'])
+def check_in_table():
+    if request.method == 'POST':
+        so_ban = request.form.get('table_number')
+        if so_ban:
+            return redirect(url_for('index'))
+    return render_template('enter_table.html')
 
 
 if __name__ == "__main__":

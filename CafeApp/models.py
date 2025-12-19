@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer,Time, String, DateTime, Enum as SqlEnum,Date, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from flask_login import UserMixin
-from CafeApp import db
+from CafeApp import db, app
 import datetime
 from enum import Enum
 
@@ -93,6 +93,15 @@ class Mon(Base):
     trangThai = Column(SqlEnum(TrangThaiMonEnum), default=TrangThaiMonEnum.DANG_BAN)
     image = Column(String(255))
     loaiMon = Column(SqlEnum(LoaiMonEnum), nullable=False, default=LoaiMonEnum.NUOC)
+    topping_links = db.relationship(
+        "MonTopping",
+        back_populates="mon",
+        cascade="all, delete-orphan"
+    )
+
+    @property
+    def allowed_toppings(self):
+        return [link for link in self.topping_links if link.is_allowed and link.topping and link.topping.is_active]
 
 class SizeEnum(Enum):
     S = "S"
@@ -116,11 +125,55 @@ class ChiTietHoaDon(db.Model):
 
     hoaDon = relationship("HoaDon", backref="chiTiet")
     mon = relationship("Mon", back_populates="chiTietHoaDon")
+    topping_links = db.relationship(
+        "ChiTietHoaDonTopping",
+        back_populates="chi_tiet",
+        cascade="all, delete-orphan"
+    )
 
 class TrangThaiThanhToanEnum(Enum):
     CHO_XU_LY = "CHO_XU_LY"
     THANH_CONG = "THANH_CONG"
     THAT_BAI = "THAT_BAI"
+
+
+
+class Topping(Base):
+    code = db.Column(db.String(50), unique=True, nullable=False)   # TRAN_CHAU            # Trân châu
+    price = db.Column(db.Integer, nullable=False, default=0)      # giá mặc định
+    is_active = db.Column(db.Boolean, default=True)
+    mon_links = db.relationship(
+        "MonTopping",
+        back_populates="topping",
+        cascade="all, delete-orphan"
+    )
+
+class MonTopping(db.Model):
+
+    mon_id = db.Column(db.Integer, db.ForeignKey(Mon.__table__.c.id), primary_key=True)
+    topping_id = db.Column(db.Integer, db.ForeignKey(Topping.__table__.c.id), primary_key=True)
+
+    # mở rộng
+    override_price = db.Column(db.Integer, nullable=True)   # nếu null → dùng Topping.price
+    is_allowed = db.Column(db.Boolean, default=True)
+
+    # relationships
+    mon = db.relationship("Mon", back_populates="topping_links")
+    topping = db.relationship("Topping", back_populates="mon_links")
+
+
+class ChiTietHoaDonTopping(db.Model):
+
+    chi_tiet_hoa_don_id = db.Column(db.Integer, db.ForeignKey(ChiTietHoaDon.__table__.c.id), primary_key=True)
+    topping_id = db.Column(db.Integer, db.ForeignKey(Topping.__table__.c.id), primary_key=True)
+
+    qty = db.Column(db.Integer, default=1)
+    price_at_time = db.Column(db.Integer, nullable=False, default=0)
+
+    chi_tiet = db.relationship("ChiTietHoaDon", back_populates="topping_links")
+    topping = db.relationship("Topping")
+
+
 
 class ThanhToan(Base):
 
@@ -220,7 +273,7 @@ class BaoCaoTonKho(Base):
     soNguyenLieuSapHet = Column(Integer, default=0)
     soNguyenLieuHetHang = Column(Integer, default=0)
 
-# if __name__=="__main__":
-#     with app.app_context():
-#         db.drop_all()
-#         db.create_all()
+if __name__=="__main__":
+    with app.app_context():
+        db.drop_all()
+        db.create_all()

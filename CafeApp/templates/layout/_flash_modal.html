@@ -1,0 +1,90 @@
+{% set flashed = get_flashed_messages(with_categories=True) %}
+{% if flashed %}
+  {% set danger_msg = None %}
+  {% set warning_msg = None %}
+  {% set first_cat = flashed[0][0] %}
+  {% set first_msg = flashed[0][1] %}
+
+  {% for c, m in flashed %}
+    {% if c in ['danger', 'error'] and danger_msg is none %}
+      {% set danger_msg = m %}
+    {% elif c == 'warning' and warning_msg is none %}
+      {% set warning_msg = m %}
+    {% endif %}
+  {% endfor %}
+
+  {% if danger_msg is not none %}
+    {% set cat = 'danger' %}
+    {% set msg = danger_msg %}
+  {% elif warning_msg is not none %}
+    {% set cat = 'warning' %}
+    {% set msg = warning_msg %}
+  {% else %}
+    {% set cat = first_cat %}
+    {% set msg = first_msg %}
+  {% endif %}
+
+  <div class="modal fade" id="flashModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+      <div class="modal-content">
+
+        <div class="modal-header">
+          <h5 class="modal-title">{{ "Cảnh báo" if cat == "warning" else "Thông báo" }}</h5>
+
+          {# Bootstrap 4 close button #}
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+
+          {# Bootstrap 5 close button (ẩn nếu BS4) #}
+          <button type="button" class="btn-close d-none" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">{{ msg }}</div>
+
+        <div class="modal-footer">
+          <button type="button"
+                  id="flashModalOk"
+                  class="btn btn-{{ 'warning' if cat=='warning' else ('danger' if cat in ['danger','error'] else 'primary') }}"
+                  data-dismiss="modal"
+                  data-bs-dismiss="modal">
+            Xác nhận
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      var el = document.getElementById("flashModal");
+      if (!el) return;
+
+      // Nếu có Bootstrap 5
+      if (window.bootstrap && bootstrap.Modal) {
+        // show modal
+        var m5 = new bootstrap.Modal(el);
+        m5.show();
+
+        // bật nút close BS5 (nếu bạn muốn)
+        var btnClose5 = el.querySelector(".btn-close");
+        if (btnClose5) btnClose5.classList.remove("d-none");
+
+        // fallback đóng khi bấm OK (đề phòng data-bs-dismiss không ăn)
+        var ok = document.getElementById("flashModalOk");
+        if (ok) ok.addEventListener("click", function () { m5.hide(); });
+
+        return;
+      }
+
+      // Bootstrap 4 (jQuery)
+      if (window.jQuery && jQuery.fn && jQuery.fn.modal) {
+        jQuery(el).modal("show");
+        // data-dismiss sẽ tự đóng, nhưng thêm fallback cho chắc
+        var ok4 = document.getElementById("flashModalOk");
+        if (ok4) ok4.addEventListener("click", function () { jQuery(el).modal("hide"); });
+      }
+    });
+  </script>
+{% endif %}

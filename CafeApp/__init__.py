@@ -1,3 +1,5 @@
+import re
+
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
@@ -6,7 +8,9 @@ app = Flask(__name__)
 app.secret_key = "sdaasasadadss"
 app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:Root%40123A@localhost/cafedb?charset=utf8mb4"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
-
+PAGE_SIZE = 10
+MAX_CART_ITEMS = 10
+PHONE_RE = re.compile(r"^0\d{9}$")
 
 VIETQR_CLIENT_ID = "12fd8a9e-7343-472b-ae9b-a370ac11d4a8"
 VIETQR_API_KEY = "556aae93-e87b-4a41-ab76-6e040379eae2"

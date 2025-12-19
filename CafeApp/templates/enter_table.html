@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chọn Bàn - Cafe Vip Pro</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            background-color: #e9ecef;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        .card-custom {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #28a745;
+            color: white;
+            text-align: center;
+            padding: 30px 20px;
+            border: none;
+        }
+        .logo-icon { font-size: 50px; margin-bottom: 10px; }
+        .brand-name { font-weight: bold; font-size: 22px; text-transform: uppercase; }
+        .card-body { padding: 30px; background: white; }
+
+        .form-control-lg {
+            border-radius: 50px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+        }
+        .form-control-lg:focus {
+            border-color: #28a745;
+            box-shadow: none;
+        }
+
+        .btn-confirm {
+            background-color: #28a745;
+            border: none;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 50px;
+            width: 100%;
+            margin-top: 20px;
+            color: white;
+            transition: 0.3s;
+            box-shadow: 0 4px 6px rgba(40, 167, 69, 0.3);
+        }
+        .btn-confirm:hover { background-color: #218838; transform: translateY(-2px); }
+        .welcome-text { text-align: center; margin-bottom: 30px; color: #666; }
+    </style>
+</head>
+<body>
+
+    <div class="card card-custom">
+        <div class="card-header">
+            <div class="logo-icon"><i class="fas fa-leaf"></i></div>
+            <div class="brand-name">Cafe Vip Pro</div>
+            <div style="font-size: 14px; opacity: 0.9;">Xin chào quý khách!</div>
+        </div>
+        <div class="card-body">
+            <p class="welcome-text">Vui lòng nhập số bàn</p>
+
+            <form action="/check-in" method="POST">
+                <div class="form-group">
+                    <input type="number" name="table_number" class="form-control form-control-lg" placeholder="Nhập số bàn (VD: 5)" required min="1" autofocus>
+                </div>
+
+                <button type="submit" class="btn btn-confirm">
+                    XÁC NHẬN <i class="fas fa-arrow-right ml-2"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
+
