@@ -85,6 +85,12 @@ class LoaiMonEnum(Enum):
     NUOC = "NUOC"
     BANH = "BANH"
 
+class NhomMonEnum(Enum):
+    CA_PHE = "CA_PHE"
+    TRA = "TRA"
+    BANH_NGOT = "BANH_NGOT"
+    KHAC = "KHAC"
+
 class Mon(Base):
     chiTietHoaDon = relationship("ChiTietHoaDon", back_populates="mon", lazy=True)
     congThuc = relationship("CongThuc", backref="mon", lazy=True)
@@ -93,6 +99,7 @@ class Mon(Base):
     trangThai = Column(SqlEnum(TrangThaiMonEnum), default=TrangThaiMonEnum.DANG_BAN)
     image = Column(String(255))
     loaiMon = Column(SqlEnum(LoaiMonEnum), nullable=False, default=LoaiMonEnum.NUOC)
+    nhom = db.Column( SqlEnum(NhomMonEnum, native_enum=False),nullable=True)
     topping_links = db.relationship(
         "MonTopping",
         back_populates="mon",

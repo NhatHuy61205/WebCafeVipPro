@@ -21,10 +21,25 @@
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h3 class="fw-bold m-0">THỰC ĐƠN HÔM NAY</h3>
             <div class="btn-group">
-                <button class="btn btn-dark active" type="button">Tất cả</button>
-                <button class="btn btn-outline-dark" type="button">Cà phê</button>
-                <button class="btn btn-outline-dark" type="button">Trà sữa</button>
+                {% set cur_cat = category or 'ALL' %}
+                {% set cur_q = q or '' %}
+
+                <a class="btn btn-dark {% if cur_cat=='ALL' %}active{% endif %}"
+                   href="{{ url_for('menu', page=1, category='ALL', q=cur_q) }}">
+                    Tất cả
+                </a>
+
+                <a class="btn btn-outline-dark {% if cur_cat=='CA_PHE' %}active{% endif %}"
+                   href="{{ url_for('menu', page=1, category='CA_PHE', q=cur_q) }}">
+                    Cà phê
+                </a>
+
+                <a class="btn btn-outline-dark {% if cur_cat=='TRA_SUA' %}active{% endif %}"
+                   href="{{ url_for('menu', page=1, category='TRA_SUA', q=cur_q) }}">
+                    Trà sữa
+                </a>
             </div>
+
         </div>
 
         <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
@@ -50,7 +65,7 @@
                             {% else %}
                             {% if mon.loaiMon == LoaiMonEnum.NUOC %}
                             <a class="btn btn-sm btn-outline-primary rounded-pill"
-                                href="{{ url_for('drink_config', mon_id=mon.id, next=request.full_path) }}">
+                               href="{{ url_for('drink_config', mon_id=mon.id, next=request.full_path) }}">
                                 <i class="fas fa-plus"></i> Thêm
                             </a>
                             {% else %}
@@ -83,17 +98,17 @@
                     <ul class="pagination pagination-sm mb-0">
 
                         <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-                            <a class="page-link" href="{{ url_for('menu', page=page-1) }}">«</a>
+                            <a class="page-link" href="{{ url_for('menu', page=page-1, q=q, category=category) }}">«</a>
                         </li>
 
                         {% for p in range(1, pages + 1) %}
                         <li class="page-item {% if p == page %}active{% endif %}">
-                            <a class="page-link" href="{{ url_for('menu', page=p) }}">{{ p }}</a>
+                            <a class="page-link" href="{{ url_for('menu', page=p, q=q, category=category) }}">{{ p }}</a>
                         </li>
                         {% endfor %}
 
                         <li class="page-item {% if page >= pages %}disabled{% endif %}">
-                            <a class="page-link" href="{{ url_for('menu', page=page+1) }}">»</a>
+                            <a class="page-link" href="{{ url_for('menu', page=page+1, q=q, category=category) }}">»</a>
                         </li>
 
                     </ul>

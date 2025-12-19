@@ -247,10 +247,14 @@
         .btn-pay { width: 100%; background-color: #fd7e14; color: white; font-weight: bold; padding: 10px; border: none; font-size: 16px; }
         .btn-pay:hover { background-color: #e96b02; }
 
+        .layout-full .cart-area{
+  display: none !important;
+}
+
         /*  LAYOUT CONTROL  */
         .layout-full .col-left { flex: 0 0 100%; max-width: 100%; }
         .layout-split .col-left { flex: 0 0 66.66%; max-width: 66.66%; }
-        .layout-split .cart-area { display: flex; flex: 0 0 33.33%; max-width: 33.33%; }
+        .layout-split .cart-area { display: flex !important; flex: 0 0 33.33%; max-width: 33.33%; }
 
     </style>
 {% endblock %}
@@ -264,68 +268,107 @@
          class="row no-gutters {% if pos_cart and pos_cart|length > 0 or modal_ctx %}layout-split{% else %}layout-full{% endif %}">
 
         <div class="col-12 col-left">
-            <div class="cat-bar">
-                <button class="cat-btn active">Tất cả</button>
-                <button class="cat-btn">Cà phê</button>
-                <button class="cat-btn">Trà</button>
-                <button class="cat-btn">Bánh ngọt</button>
-                <button class="cat-btn">Khác</button>
+  <div class="cat-bar">
 
-                <div style="display:inline-block; float:right; width: 300px;">
-                    <input type="text" class="form-control form-control-sm" placeholder="Tìm món (F3)...">
-                </div>
-            </div>
+    <!-- ===== FILTER + SEARCH (GET) ===== -->
+    <form method="get" action="{{ url_for('pos_page') }}" class="m-0 d-flex align-items-center w-100">
+      {% set cur_cat = category or 'ALL' %}
+      {% set cur_q = q or '' %}
 
-            <div class="product-area">
-                <div class="row px-2">
-                    {% for item in items %}
-                    <div class="col-6 col-md-3 col-lg-2 px-1">
-                        <a href="{{ url_for('pos_page', page=page, mon_id=item.id) }}"
-                           class="text-decoration-none text-dark">
+      <!-- giữ page=1 khi đổi filter/search -->
+      <input type="hidden" name="page" value="1">
 
-                            <div class="product-card"
-                            >
-                                <div class="p-price-tag">{{ "{:,.0f}".format(item.gia) }}</div>
+      <!-- NÚT CATEGORY: submit bằng button -->
+      <button type="submit" name="category" value="ALL"
+              class="cat-btn {% if cur_cat == 'ALL' %}active{% endif %}">
+        Tất cả
+      </button>
 
-                                {% if item.image %}
-                                <img src="{{ url_for('static', filename='img/' + item.image) }}" class="p-img"
-                                     alt="{{ item.name }}">
-                                {% else %}
-                                <img src="https://via.placeholder.com/150?text={{ item.name[:2] }}" class="p-img">
-                                {% endif %}
+      <button type="submit" name="category" value="CA_PHE"
+              class="cat-btn {% if cur_cat == 'CA_PHE' %}active{% endif %}">
+        Cà phê
+      </button>
 
-                                <div class="p-name">{{ item.name }}</div>
-                            </div>
-                        </a>
-                    </div>
-                    {% endfor %}
-                </div>
-                <div class="pos-pagination d-flex justify-content-center">
-                    {% if pages > 1 %}
-                    <nav>
-                        <ul class="pagination pagination-sm mb-0">
-                            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-                                <a class="page-link" href="{{ url_for('pos_page', page=page-1) }}">«</a>
-                            </li>
+      <button type="submit" name="category" value="TRA"
+              class="cat-btn {% if cur_cat == 'TRA' %}active{% endif %}">
+        Trà
+      </button>
 
-                            {% for p in range(1, pages + 1) %}
-                            <li class="page-item {% if p == page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('pos_page', page=p) }}">{{ p }}</a>
-                            </li>
-                            {% endfor %}
+      <button type="submit" name="category" value="BANH_NGOT"
+              class="cat-btn {% if cur_cat == 'BANH_NGOT' %}active{% endif %}">
+        Bánh ngọt
+      </button>
 
-                            <li class="page-item {% if page >= pages %}disabled{% endif %}">
-                                <a class="page-link" href="{{ url_for('pos_page', page=page+1) }}">»</a>
-                            </li>
-                        </ul>
-                    </nav>
-                    {% endif %}
-                </div>
+      <button type="submit" name="category" value="KHAC"
+              class="cat-btn {% if cur_cat == 'KHAC' %}active{% endif %}">
+        Khác
+      </button>
 
-            </div>
+      <!-- SEARCH bên phải -->
+      <div style="display:inline-block; margin-left:auto; width: 300px;">
+        <!-- giữ category hiện tại khi search -->
+        <input type="hidden" name="category" value="{{ cur_cat }}">
+        <input type="text"
+               name="q"
+               value="{{ cur_q }}"
+               class="form-control form-control-sm"
+               placeholder="Tìm món (F3)...">
+      </div>
+    </form>
+  </div>
 
+  <div class="product-area">
+    <div class="row px-2">
+      {% for item in items %}
+      <div class="col-6 col-md-3 col-lg-2 px-1">
+        <a href="{{ url_for('pos_page', page=page, mon_id=item.id, q=cur_q, category=cur_cat) }}"
+           class="text-decoration-none text-dark">
 
-        </div>
+          <div class="product-card">
+            <div class="p-price-tag">{{ "{:,.0f}".format(item.gia) }}</div>
+
+            {% if item.image %}
+            <img src="{{ url_for('static', filename='img/' + item.image) }}" class="p-img"
+                 alt="{{ item.name }}">
+            {% else %}
+            <img src="https://via.placeholder.com/150?text={{ item.name[:2] }}" class="p-img">
+            {% endif %}
+
+            <div class="p-name">{{ item.name }}</div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="pos-pagination d-flex justify-content-center">
+      {% if pages > 1 %}
+      <nav>
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('pos_page', page=page-1, q=cur_q, category=cur_cat) }}">«</a>
+          </li>
+
+          {% for p in range(1, pages + 1) %}
+          <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('pos_page', page=p, q=cur_q, category=cur_cat) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+
+          <li class="page-item {% if page >= pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('pos_page', page=page+1, q=cur_q, category=cur_cat) }}">»</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
 
         <div class="cart-area d-flex flex-column">
 

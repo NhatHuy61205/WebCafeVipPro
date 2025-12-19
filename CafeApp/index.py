@@ -6,13 +6,12 @@ import re
 from functools import wraps
 import urllib.parse
 from typing import Optional
-
 import qrcode
 from flask_login import LoginManager, login_user, current_user, login_required, logout_user
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import  or_
 from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang, LoaiQREnum, TrangThaiQREnum, \
-    ThongBao, ChiTietHoaDonTopping
+    ThongBao, ChiTietHoaDonTopping, NhomMonEnum
 from CafeApp.models import LoaiDungEnum, TrangThaiHoaDonEnum, SizeEnum
 from CafeApp.models import LoaiMonEnum, QRCode
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash, current_app, \
@@ -42,6 +41,23 @@ def normalize_items(items):
         out.append({"ten": ten, "sl": sl, "tien": tien, "desc": desc})
     return out
 
+def query_mon_list(q=None, category=None):
+    query = Mon.query
+
+    if hasattr(Mon, "trangThai"):
+        query = query.filter(Mon.trangThai == "DANG_BAN")
+
+    if q:
+        keyword = f"%{q.strip()}%"
+        conds = [Mon.name.ilike(keyword)]
+        if hasattr(Mon, "moTa"):
+            conds.append(Mon.moTa.ilike(keyword))
+        query = query.filter(or_(*conds))
+
+    if category and category != "ALL":
+        query = query.filter(Mon.nhom == NhomMonEnum[category].value)
+
+    return query
 
 def make_qr_data_uri(text: str) -> str:
     img = qrcode.make(text)
@@ -411,11 +427,27 @@ def cart_stats(cart):
 
 @app.route("/menu", methods=["GET"])
 def menu():
-    # ===== Pagination =====
     page = request.args.get("page", 1, type=int)
+    q = (request.args.get("q") or "").strip()
+    category = (request.args.get("category") or "ALL").strip()
+
+
+    if category == "TRA_SUA":
+        category = "TRA"
 
     base_q = Mon.query.filter(Mon.trangThai == "DANG_BAN")
 
+    if q:
+        kw = f"%{q}%"
+        conds = [Mon.name.ilike(kw)]
+        if hasattr(Mon, "moTa"):
+            conds.append(Mon.moTa.ilike(kw))
+        base_q = base_q.filter(or_(*conds))
+
+    if category != "ALL":
+        base_q = base_q.filter(Mon.nhom == category)
+
+    # ===== pagination =====
     total_items = base_q.count()
     pages = max(1, math.ceil(total_items / PAGE_SIZE))
 
@@ -430,8 +462,8 @@ def menu():
              .limit(PAGE_SIZE)
              .all())
 
+    # ===== cart =====
     cart = get_cart()
-
     if not cart:
         session.pop("checkout_mode", None)
         session.modified = True
@@ -447,6 +479,8 @@ def menu():
         items=items,
         page=page,
         pages=pages,
+        q=q,
+        category=category,
 
         cart=cart,
         total_qty=total_qty,
@@ -875,10 +909,14 @@ def pos_page():
         return redirect(url_for("login_my_user"))
 
     pos_order_type = session.get("pos_order_type", "TAI_QUAN")
-    # ===== PHÂN TRANG =====
-    page = request.args.get("page", 1, type=int)
 
-    pagination = Mon.query.paginate(
+    # ===== FILTER + PAGINATION PARAMS =====
+    page = request.args.get("page", 1, type=int)
+    q = (request.args.get("q") or "").strip()
+    category = (request.args.get("category") or "ALL").strip()
+
+    # ===== QUERY + PAGINATE (DÙNG HÀM CHUNG) =====
+    pagination = query_mon_list(q=q, category=category).paginate(
         page=page,
         per_page=PAGE_SIZE,
         error_out=False
@@ -891,6 +929,7 @@ def pos_page():
     pos_cart = session.get("pos_cart", {}) or {}
     open_customer_modal = bool(session.pop("open_customer_modal", False))
     session.modified = True
+
     # ===== MODAL OVERLAY (nếu có mon_id) =====
     mon_id = request.args.get("mon_id", type=int)
     edit_key = (request.args.get("edit_key") or "").strip()
@@ -907,7 +946,7 @@ def pos_page():
                 cart=pos_cart,
                 option_key=option_key,
                 redirect_endpoint="pos_page",
-                redirect_kwargs={"page": page},
+                redirect_kwargs={"page": page, "q": q, "category": category},
                 message="Quá số lượng món trên hóa đơn (tối đa 10 món khác nhau).",
                 edit_key=None
             )
@@ -920,29 +959,20 @@ def pos_page():
                     "name": mon.name,
                     "price": float(mon.gia),
                     "quantity": 0,
-                    "options": {
-                        "desc": [],
-                        "note": ""
-                    }
+                    "options": {"desc": [], "note": ""}
                 }
 
             pos_cart[option_key]["quantity"] += 1
             session["pos_cart"] = pos_cart
             session.modified = True
 
-            return redirect(url_for("pos_page", page=page))
+            return redirect(url_for("pos_page", page=page, q=q, category=category))
+
         if mon.loaiMon == LoaiMonEnum.NUOC:
             SIZE_OPTS, SUGAR_OPTS, ICE_OPTS = get_drink_static_opts()
             TOPPING_OPTS = get_topping_opts_for_mon(mon)
 
-            form = {
-                "size": "S",
-                "duong": "70",
-                "da": "70",
-                "topping": [],
-                "note": "",
-                "quantity": "1"
-            }
+            form = {"size": "S", "duong": "70", "da": "70", "topping": [], "note": "", "quantity": "1"}
 
             if edit_key and edit_key in pos_cart:
                 old = pos_cart[edit_key]
@@ -958,9 +988,7 @@ def pos_page():
 
             form["topping"] = normalize_topping_codes(form["topping"], TOPPING_OPTS)
 
-            unit_price, desc_list = build_drink(
-                mon, form["size"], form["duong"], form["da"], form["topping"]
-            )
+            unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
             qty = int(form["quantity"] or 1)
             total_price = unit_price * qty
 
@@ -977,7 +1005,7 @@ def pos_page():
                 TOPPING_OPTS=TOPPING_OPTS,
                 edit_key=edit_key or None,
                 ui_mode="MENU",
-                close_url=url_for("pos_page", page=page),
+                close_url=url_for("pos_page", page=page, q=q, category=category),
                 form_action=url_for("pos_drink_config", mon_id=mon.id)
             )
 
@@ -988,6 +1016,8 @@ def pos_page():
         modal_ctx=modal_ctx,
         page=page,
         pages=pages,
+        q=q,
+        category=category,
         pos_order_type=pos_order_type,
         open_customer_modal=open_customer_modal
     ))

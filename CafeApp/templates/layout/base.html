@@ -27,14 +27,22 @@
         <div class="collapse navbar-collapse" id="navbarNav">
 
             <form class="d-flex mx-auto my-2 my-lg-0 w-50" action="{{ url_for('menu') }}" method="GET">
-                <div class="input-group">
-                    <input class="form-control border-success rounded-start-pill" type="search" name="q"
-                           placeholder="Bạn muốn tìm món gì? (VD: Trà đào)" aria-label="Search">
-                    <button class="btn btn-success rounded-end-pill px-4" type="submit">
-                        <i class="fas fa-search"></i>
-                    </button>
-                </div>
-            </form>
+  <div class="input-group">
+    <!-- GIỮ CATEGORY KHI SEARCH -->
+    <input type="hidden" name="category" value="{{ category or 'ALL' }}">
+
+    <input class="form-control border-success rounded-start-pill"
+           type="search"
+           name="q"
+           value="{{ q or '' }}"
+           placeholder="Bạn muốn tìm món gì? (VD: Trà đào)"
+           aria-label="Search">
+
+    <button class="btn btn-success rounded-end-pill px-4" type="submit">
+      <i class="fas fa-search"></i>
+    </button>
+  </div>
+</form>
 
             <ul class="navbar-nav ms-auto align-items-center gap-2">
                 <li class="nav-item">
