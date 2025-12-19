@@ -61,7 +61,7 @@
             box-shadow: 0 4px 6px rgba(40, 167, 69, 0.3);
         }
         .btn-confirm:hover { background-color: #218838; transform: translateY(-2px); }
-        .welcome-text { text-align: center; margin-bottom: 30px; color: #666; }
+        .welcome-text { text-align: center; margin-bottom: 10px; color: #666; }
     </style>
 </head>
 <body>
@@ -75,9 +75,21 @@
         <div class="card-body">
             <p class="welcome-text">Vui lòng nhập số bàn</p>
 
-            <form action="/check-in" method="POST">
+            {% if error %}
+              <div class="alert alert-danger py-2" role="alert" style="border-radius:10px;">
+                {{ error }}
+              </div>
+            {% endif %}
+
+            <!-- POST về đúng URL hiện tại: /enter-table/<ma_qr> -->
+            <form action="" method="POST" target="_blank">
                 <div class="form-group">
-                    <input type="number" name="table_number" class="form-control form-control-lg" placeholder="Nhập số bàn (VD: 5)" required min="1" autofocus>
+                    <input
+                      type="number"
+                      name="so_ban"
+                      class="form-control form-control-lg"
+                      placeholder="Nhập số bàn (VD: 5)"
+                      required min="1" autofocus>
                 </div>
 
                 <button type="submit" class="btn btn-confirm">
@@ -89,4 +101,3 @@
 
 </body>
 </html>
-

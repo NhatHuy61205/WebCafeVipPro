@@ -50,7 +50,7 @@ class KhachHang(Base):
     tongDonHangDaMua = Column(Integer, default=0)
     loaiKhachHang = Column(SqlEnum(LoaiDungEnum),nullable=False)
     email = Column(String(150), nullable=True, unique=True)
-
+    hoaDons = relationship("HoaDon", back_populates="khachHang")
 
 class TrangThaiHoaDonEnum(Enum):
     HUY = "HUY"
@@ -73,7 +73,7 @@ class HoaDon(Base):
     khachHang_id = Column(Integer, ForeignKey(KhachHang.__table__.c.id), nullable=True)
     maThamChieu = Column(String(50), unique=True, nullable=True)  # ví dụ: "HD123"
     ngayTao = Column(DateTime, default=datetime.datetime.now())
-
+    khachHang = relationship("KhachHang", back_populates="hoaDons")
 
 
 class TrangThaiMonEnum(Enum):
@@ -272,6 +272,21 @@ class BaoCaoTonKho(Base):
     tongSoNguyenLieu = Column(Integer, default=0)
     soNguyenLieuSapHet = Column(Integer, default=0)
     soNguyenLieuHetHang = Column(Integer, default=0)
+
+
+class ThongBao(db.Model):
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.now, nullable=False)
+
+    hoaDon_id = db.Column(db.Integer, db.ForeignKey(HoaDon.__table__.c.id), nullable=False, index=True)
+
+    message = db.Column(db.String(255), nullable=False)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    type = db.Column(db.String(50), default="TABLE_CONFIRMED", nullable=False)
+
+    hoaDon = db.relationship("HoaDon", backref=db.backref("thongBao", lazy=True))
+
 
 if __name__=="__main__":
     with app.app_context():

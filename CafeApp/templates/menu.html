@@ -76,7 +76,7 @@
             <p class="text-danger">Chưa có món nào được thêm vào Menu.</p>
             {% endif %}
         </div>
-        {% if pages > 1 %}
+        {% if pages is defined and pages|int > 1 %}
         <div class="row mt-3">
             <div class="col-12 d-flex justify-content-center">
                 <nav>

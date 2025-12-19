@@ -1,13 +1,14 @@
 
 import hashlib
+import secrets
+from flask import abort
 from datetime import datetime
-
 from dataclasses import dataclass
 from typing import List, Tuple
 from CafeApp import db, app
 from flask import session
 from CafeApp.models import NhanVienCuaHang, SizeEnum, Topping, MonTopping, TrangThaiHoaDonEnum, ChiTietHoaDon, \
-    LoaiDungEnum, HoaDon, ChiTietHoaDonTopping, KhachHang
+    LoaiDungEnum, HoaDon, ChiTietHoaDonTopping, KhachHang, LoaiQREnum, TrangThaiQREnum, QRCode, ThongBao
 
 
 @dataclass
@@ -321,7 +322,7 @@ def upsert_hoa_don_from_pos_cart(
             "mon_id": it.get("id"),
             "name": it.get("name", ""),
             "qty": qty,
-            "unit_price": price,         # giá 1 ly (đã gồm topping nếu bạn tính vậy)
+            "unit_price": price,
             "line_total": price * qty,
             "size": size,
             "mucDuong": muc_duong,
@@ -340,7 +341,9 @@ def upsert_hoa_don_from_pos_cart(
     grand_total = subtotal + tax_amount + service_fee
 
     # ===== LOẠI HÓA ĐƠN =====
-    loai_str = session.get("pos_order_type", "TAI_QUAN")  # "TAI_QUAN"/"MANG_DI"/"TAI_NHA"
+    loai_str = (session.get("pos_order_type") or "TAI_QUAN").strip()
+    if loai_str not in LoaiDungEnum.__members__:
+        loai_str = "TAI_QUAN"
     loai_enum = LoaiDungEnum[loai_str]
 
     kh = get_or_create_khach_hang_from_pos()
@@ -398,8 +401,9 @@ def upsert_hoa_don_from_pos_cart(
                     price_at_time=_topping_price_at_time(int(it["mon_id"]), int(top_id)),
                 )
                 db.session.add(link)
+        pos_type = session.get("pos_order_type", "TAI_QUAN")
 
-        db.session.commit()
+
 
         session["pos_current_bill_id"] = hd.id
         session.modified = True
@@ -464,3 +468,78 @@ def upsert_hoa_don_from_pos_cart(
         "now": datetime.now(),
     }
     return hd, (items, meta)
+
+
+def pay_from_pos_cart(rebuild_details: bool = True):
+    hd, pack = upsert_hoa_don_from_pos_cart(
+        status=TrangThaiHoaDonEnum.DA_THANH_TOAN,
+        rebuild_details=rebuild_details
+    )
+    if not hd:
+        return None, None, None
+
+    items, meta = pack
+
+    # Nếu là TẠI QUÁN → tạo QR nhập số bàn
+    if hd.loaiHoaDon == LoaiDungEnum.TAI_QUAN:
+        token = secrets.token_urlsafe(16)
+
+        qr = QRCode(
+            maQR=token,
+            loaiQR=LoaiQREnum.NHAP_SO_BAN,
+            noiDungQR=f"/enter-table/{token}",
+            hoaDon_id=hd.id,
+            trangThai=TrangThaiQREnum.CON_HIEU_LUC
+        )
+        db.session.add(qr)
+
+    db.session.commit()
+    return hd, items, meta
+
+def create_table_confirm_notification(hd, so_ban: int) -> ThongBao:
+    kh = getattr(hd, "khachHang", None)
+    if kh is None and getattr(hd, "khachHang_id", None):
+        kh = KhachHang.query.get(hd.khachHang_id)
+
+    ten = (getattr(kh, "name", None) or "Khách lẻ")
+    sdt = (getattr(kh, "sdt", None) or "")
+
+    msg = f"{ten}{(' - ' + sdt) if sdt else ''} | HĐ #{hd.id} đang ở bàn {so_ban}"
+
+    tb = ThongBao(
+        hoaDon_id=hd.id,
+        message=msg,
+        is_read=False,
+        type="TABLE_CONFIRMED",
+    )
+    db.session.add(tb)
+    return tb
+
+def confirm_table_by_qr(ma_qr: str, so_ban: int):
+    qr = QRCode.query.filter_by(
+        maQR=ma_qr,
+        loaiQR=LoaiQREnum.NHAP_SO_BAN,
+        trangThai=TrangThaiQREnum.CON_HIEU_LUC
+    ).first()
+
+    if not qr:
+        abort(404)
+
+    hd = HoaDon.query.get(qr.hoaDon_id)
+    if not hd:
+        abort(404)
+
+    if hd.loaiHoaDon != LoaiDungEnum.TAI_QUAN:
+        abort(400, description="QR không hợp lệ cho hóa đơn mang đi.")
+
+    if so_ban <= 0:
+        abort(400, description="Số bàn không hợp lệ.")
+
+    hd.soBan = so_ban
+    qr.trangThai = TrangThaiQREnum.HET_HIEU_LUC
+
+    # tạo thông báo
+    create_table_confirm_notification(hd, so_ban)
+
+    db.session.commit()
+    return hd

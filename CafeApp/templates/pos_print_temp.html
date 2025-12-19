@@ -1,218 +1,126 @@
 <!doctype html>
 <html lang="vi">
 <head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Hóa đơn tạm</title>
-
-    <style>
-        /* To hơn + chữ đẹp hơn */
-        :root { --w: 90mm; }
-
-        body { margin: 0; background: #f2f2f2; font-family: "Segoe UI", Arial, Helvetica, sans-serif; }
-        .paper {
-          width: var(--w);
-          margin: 14px auto;
-          background: #fff;
-          padding: 14px 14px 16px;
-          box-sizing: border-box;
-          border-radius: 10px;
-        }
-
-        .center { text-align: center; }
-        .muted { color: #666; font-size: 12.5px; }
-        .title { font-weight: 900; font-size: 20px; letter-spacing: .6px; }
-        .sub { font-size: 13.5px; color: #333; margin-top: 2px; }
-        .headline { margin-top: 7px; font-weight: 900; font-size: 17px; }
-
-        .customer {
-          margin-top: 6px;
-          font-size: 13.5px;
-          color: #111;
-          font-weight: 600;
-          line-height: 1.25;
-        }
-        .customer .line { display:flex; justify-content:center; gap:8px; flex-wrap: wrap; }
-        .customer .k { color:#666; font-weight:700; }
-
-        hr { border: 0; border-top: 1px dashed #9a9a9a; margin: 10px 0; }
-
-        .row { display: flex; justify-content: space-between; gap: 10px; font-size: 14.5px; }
-        .row .lbl { color:#111; }
-        .row .val { text-align:right; font-weight: 800; }
-
-        table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
-        th, td { padding: 4.5px 0; vertical-align: top; }
-        th { text-align: left; border-bottom: 1px dashed #aaa; padding-bottom: 6px; font-weight: 800; }
-        td.r, th.r { text-align: right; }
-
-        .item-name { font-weight: 900; }
-        .desc { font-size: 12.5px; color: #444; margin-top: 2px; line-height: 1.25; }
-
-        .total { font-size: 18.5px; font-weight: 900; }
-        .total .val { font-size: 21px; }
-
-        .actions {
-          width: var(--w);
-          margin: 0 auto 10px;
-          display: flex;
-          gap: 10px;
-          justify-content: center;
-        }
-        .btn {
-          padding: 8px 12px;
-          border: 1px solid #ccc;
-          background: #fff;
-          cursor: pointer;
-          border-radius: 10px;
-          font-size: 14px;
-          font-weight: 800;
-        }
-
-        @media print {
-          body { background: #fff; }
-          .actions { display: none !important; }
-          .paper { margin: 0; width: 90mm; border-radius: 0; }
-        }
-    </style>
+  <meta charset="utf-8">
+  <title>Hóa đơn tạm</title>
+  <style>
+    body { margin:0; background:#f2f2f2; font-family: Arial, Helvetica, sans-serif; font-size:12px; }
+    .receipt{
+      width: 360px;
+      background:#fff;
+      margin: 20px auto;
+      padding: 14px 12px;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+      box-sizing: border-box;
+    }
+    .center{ text-align:center; }
+    .right{ text-align:right; }
+    .bold{ font-weight:700; }
+    .muted{ color:#666; font-size:11px; }
+    hr{ border:none; border-top:1px dashed #999; margin:8px 0; }
+    table{ width:100%; border-collapse:collapse; }
+    th,td{ padding:4px 0; vertical-align:top; }
+    th{ text-align:left; border-bottom:1px solid #ddd; }
+    .desc{ margin-top:2px; font-size:11px; color:#444; line-height:1.25; }
+    .total{ font-size:16px; font-weight:800; text-align:right; margin-top:4px; }
+    .kv{ display:flex; justify-content:space-between; gap:10px; }
+    .kv .v{ text-align:right; font-weight:700; }
+  </style>
 </head>
 
 <body>
-
-<div class="actions">
-    <button class="btn" onclick="window.print()">In (Ctrl+P)</button>
-    <button class="btn" onclick="window.close()">Đóng</button>
-</div>
-
-<div class="paper">
+  <div class="receipt">
     {% if empty_cart %}
-    <div style="font-size:14px;">Giỏ hàng đang trống nên không in được.</div>
+      <div class="muted">Giỏ hàng đang trống nên không in được.</div>
     {% else %}
 
-    <div class="center">
-        <div class="title">CAFE VIP PRO</div>
-        <div class="sub">Trong trái tim bạn - 8386</div>
-        <div class="headline">HÓA ĐƠN TẠM</div>
+      <div class="center bold" style="font-size:16px;">HÓA ĐƠN TẠM</div>
+      <div class="center muted">Trạng thái: <b>CHỜ THANH TOÁN</b></div>
 
+      {% if khach %}
+        <div class="center" style="margin-top:6px;">
+          Khách: <b>{{ khach.name }}</b>
+          {% if khach.sdt %}&nbsp; SĐT: <b>{{ khach.sdt }}</b>{% endif %}
+        </div>
+      {% else %}
+        <div class="center muted" style="margin-top:6px;">Khách: Chưa có thông tin</div>
+      {% endif %}
 
-        <div class="customer">
-            {% if khach %}
-            <div class="line">
-                <span><span class="k">Khách:</span> {{ khach.name }}</span>
-                <span><span class="k">SĐT:</span> {{ khach.sdt }}</span>
-            </div>
+      <hr>
+
+      <div>
+        <div>Mã HĐ: <b>#{{ bill.id }}</b></div>
+        <div>Loại:
+          <b>
+            {% if bill.loaiHoaDon %}
+              {% if bill.loaiHoaDon.value == "TAI_QUAN" %}Tại quán
+              {% elif bill.loaiHoaDon.value == "MANG_DI" %}Mang đi
+              {% elif bill.loaiHoaDon.value == "TAI_NHA" %}Tại nhà
+              {% else %}{{ bill.loaiHoaDon.value }}{% endif %}
             {% else %}
-            <div class="muted">Khách: Chưa có thông tin</div>
+              Tại quán
             {% endif %}
-
+          </b>
         </div>
-    </div>
+        <div>Thời gian: <b>{{ (bill.ngayTao or now).strftime("%d/%m/%Y %H:%M:%S") }}</b></div>
+      </div>
 
-    <hr>
+      <hr>
 
-    <div class="row">
-        <div class="lbl">Ngày:</div>
-        <div class="val">{{ (bill.ngayTao or now).strftime("%d/%m/%Y %H:%M") }}</div>
-    </div>
-
-    <div class="row" style="margin-top:4px;">
-        <div class="lbl">Trạng thái:</div>
-        <div class="val">
-            {% if bill and bill.trangThai %}{{ bill.trangThai.value }}{% else %}Chờ thanh toán{% endif %}
-        </div>
-    </div>
-
-    <div class="row" style="margin-top:4px;">
-        <div class="lbl">Loại:</div>
-        <div class="val">
-            {% if bill and bill.loaiHoaDon %}
-            {% if bill.loaiHoaDon.value == "TAI_QUAN" %}Tại quán
-            {% elif bill.loaiHoaDon.value == "MANG_DI" %}Mang đi
-            {% elif bill.loaiHoaDon.value == "TAI_NHA" %}Tại nhà
-            {% else %}{{ bill.loaiHoaDon.value }}{% endif %}
-            {% else %}
-            Tại quán
-            {% endif %}
-        </div>
-    </div>
-
-    <hr>
-
-    <table>
+      <table>
         <thead>
-        <tr>
+          <tr>
             <th>Tên món</th>
-            <th class="r">SL</th>
-            <th class="r">TT</th>
-        </tr>
+            <th class="right">SL</th>
+            <th class="right">Tiền</th>
+          </tr>
         </thead>
         <tbody>
-        {% for it in items %}
-        <tr>
-            <td>
-                <div class="item-name">{{ it.name }}</div>
+          {% if items and items|length > 0 %}
+            {% for it in items %}
+            <tr>
+              <td>
+                <div class="bold">{{ it.ten }}</div>
                 {% if it.desc %}
                 <div class="desc">
-                    {% for d in it.desc %}
+                  {% for d in it.desc %}
                     {{ d }}{% if not loop.last %}<br>{% endif %}
-                    {% endfor %}
+                  {% endfor %}
                 </div>
                 {% endif %}
-            </td>
-            <td class="r">{{ it.qty }}</td>
-            <td class="r">{{ "{:,.0f}".format(it.line_total) }}</td>
-        </tr>
-        {% endfor %}
+              </td>
+              <td class="right">{{ it.sl }}</td>
+              <td class="right">{{ "{:,.0f}".format(it.tien).replace(",", ".") }}</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="3" class="muted">Không có món.</td></tr>
+          {% endif %}
         </tbody>
-    </table>
+      </table>
 
-    <hr>
+      <hr>
 
-    <div class="row">
-        <div class="lbl">Số lượng món:</div>
-        <div class="val">{{ total_qty }}</div>
-    </div>
-    <div class="row">
-        <div class="lbl">Tiền hàng:</div>
-        <div class="val">{{ "{:,.0f}".format(subtotal) }}</div>
-    </div>
+      <div class="kv"><div>Tổng số món:</div><div class="v">{{ total_qty }}</div></div>
+      <div class="kv"><div>Tiền hàng:</div><div class="v">{{ "{:,.0f}".format(subtotal).replace(",", ".") }}</div></div>
+      <div class="kv"><div>Thuế ({{ (tax_rate*100)|round(0) }}%):</div><div class="v">{{ "{:,.0f}".format(tax_amount).replace(",", ".") }}</div></div>
+      <div class="kv"><div>Phí phục vụ ({{ service_percent }}%):</div><div class="v">{{ "{:,.0f}".format(service_fee).replace(",", ".") }}</div></div>
 
-    <!-- ✅ Thuế (8%) -->
-    {% if tax_rate and tax_rate > 0 %}
-    <div class="row" style="margin-top:4px;">
-        <div class="lbl">Thuế ({{ (tax_rate*100)|round(0) }}%):</div>
-        <div class="val">{{ "{:,.0f}".format(tax_amount) }}</div>
-    </div>
-    {% endif %}
+      <hr>
 
-    <!-- ✅ Phí phục vụ -->
-    {% if service_percent and service_percent > 0 %}
-  <div class="row">
-    <div class="lbl">Phí phục vụ ({{ service_percent }}%):</div>
-    <div class="val">{{ "{:,.0f}".format(service_fee) }}</div>
-  </div>
-{% else %}
-  <div class="row">
-    <div class="lbl">Phí phục vụ:</div>
-    <div class="val">0</div>
-  </div>
-{% endif %}
+      <div class="total">
+        TỔNG THANH TOÁN: {{ "{:,.0f}".format(grand_total).replace(",", ".") }}đ
+      </div>
 
-    <hr>
+      <hr>
 
-    <div class="row total">
-        <div class="lbl">Tổng thanh toán:</div>
-        <div class="val">{{ "{:,.0f}".format(grand_total) }}đ</div>
-    </div>
-
-    <hr>
-
-    <div class="center muted">
+      <div class="center muted">
         Cảm ơn quý khách!<br>
         (Hóa đơn tạm - chưa phải hóa đơn tài chính)
-    </div>
+      </div>
 
     {% endif %}
-</div>
+  </div>
 </body>
 </html>

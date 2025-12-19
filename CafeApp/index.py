@@ -1,21 +1,54 @@
+import base64
 import datetime
+import io
 import math
 import re
 from functools import wraps
 import urllib.parse
 from typing import Optional
 
+import qrcode
 from flask_login import LoginManager, login_user, current_user, login_required, logout_user
-from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import  or_
+from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang, LoaiQREnum, TrangThaiQREnum, \
+    ThongBao, ChiTietHoaDonTopping
 from CafeApp.models import LoaiDungEnum, TrangThaiHoaDonEnum, SizeEnum
-from CafeApp.models import LoaiMonEnum
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash, current_app
+from CafeApp.models import LoaiMonEnum, QRCode
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash, current_app, \
+    make_response
 from CafeApp import app, db, BANK_ACQ_ID, BANK_ACCOUNT_NO, BANK_ACCOUNT_NAME, dao, login, PAGE_SIZE, MAX_CART_ITEMS, \
     PHONE_RE
 from CafeApp.dao import build_drink, normalize_topping_codes, get_drink_static_opts, get_topping_opts_for_mon, \
-    upsert_hoa_don_from_pos_cart
+    upsert_hoa_don_from_pos_cart, pay_from_pos_cart, confirm_table_by_qr
 from urllib.parse import quote, unquote
 
+
+def normalize_items(items):
+
+    out = []
+    for it in items or []:
+        get = (lambda k, default=None: it.get(k, default)) if isinstance(it, dict) else (lambda k, default=None: getattr(it, k, default))
+
+        ten = get("ten") or get("name") or ""
+        sl = get("sl")
+        if sl is None:
+            sl = get("qty", 0)
+        tien = get("tien")
+        if tien is None:
+            tien = get("line_total", 0)
+
+        desc = get("desc") or []
+        out.append({"ten": ten, "sl": sl, "tien": tien, "desc": desc})
+    return out
+
+
+def make_qr_data_uri(text: str) -> str:
+    img = qrcode.make(text)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return "data:image/png;base64," + b64
 
 def cart_too_many(cart: dict, max_items: int = MAX_CART_ITEMS) -> bool:
     return len(cart) >= max_items
@@ -54,7 +87,6 @@ def block_when_checkout(func):
 @app.route("/")
 def index():
     page = request.args.get("page", 1, type=int)
-    PAGE_SIZE = 10
 
     base_q = Mon.query.filter(Mon.trangThai == "DANG_BAN")
 
@@ -381,7 +413,6 @@ def cart_stats(cart):
 def menu():
     # ===== Pagination =====
     page = request.args.get("page", 1, type=int)
-    PAGE_SIZE = 10
 
     base_q = Mon.query.filter(Mon.trangThai == "DANG_BAN")
 
@@ -843,6 +874,7 @@ def pos_page():
     if role_str != "NHAN_VIEN":
         return redirect(url_for("login_my_user"))
 
+    pos_order_type = session.get("pos_order_type", "TAI_QUAN")
     # ===== PHÂN TRANG =====
     page = request.args.get("page", 1, type=int)
 
@@ -857,7 +889,8 @@ def pos_page():
 
     # ===== GIỎ POS =====
     pos_cart = session.get("pos_cart", {}) or {}
-
+    open_customer_modal = bool(session.pop("open_customer_modal", False))
+    session.modified = True
     # ===== MODAL OVERLAY (nếu có mon_id) =====
     mon_id = request.args.get("mon_id", type=int)
     edit_key = (request.args.get("edit_key") or "").strip()
@@ -948,8 +981,20 @@ def pos_page():
                 form_action=url_for("pos_drink_config", mon_id=mon.id)
             )
 
-    return render_template("pos.html", items=items, pos_cart=pos_cart, modal_ctx=modal_ctx, page=page, pages=pages)
-
+    resp = make_response(render_template(
+        "pos.html",
+        items=items,
+        pos_cart=pos_cart,
+        modal_ctx=modal_ctx,
+        page=page,
+        pages=pages,
+        pos_order_type=pos_order_type,
+        open_customer_modal=open_customer_modal
+    ))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 def get_pos_cart():
     return session.get("pos_cart", {}) or {}
@@ -1196,7 +1241,9 @@ def pos_customer_save():
 
     if not PHONE_RE.match(phone):
         session["customer_err"] = "Vui lòng nhập số điện thoại hợp lệ (10 số, bắt đầu bằng 0)."
-        return redirect(url_for("pos_page", page=page, customer_modal=1))
+        session["open_customer_modal"] = True
+        session.modified = True
+        return redirect(url_for("pos_page", page=page))
 
     session["pos_customer"] = {"name": name, "phone": phone}
     session.modified = True
@@ -1209,6 +1256,22 @@ def pos_customer_clear():
     session.pop("pos_customer", None)
     session.modified = True
     return redirect(url_for("pos_page", page=page))
+
+
+@app.post("/pos/order-type")
+@login_required
+def pos_set_order_type():
+    v = (request.form.get("order_type") or "TAI_QUAN").strip()
+    page = request.form.get("page", 1, type=int) or 1
+
+    allowed = {"TAI_QUAN", "MANG_DI"}
+    if v not in allowed:
+        v = "TAI_QUAN"
+
+    session["pos_order_type"] = v
+    session.modified = True
+    return redirect(url_for("pos_page", page=page))
+
 
 
 @app.route("/pos/service-fee", methods=["POST"])
@@ -1243,6 +1306,7 @@ def pos_print_temp():
         return render_template("pos_print_temp.html", empty_cart=True)
 
     items, meta = payload
+    items = normalize_items(items)
 
     khach = KhachHang.query.get(hd.khachHang_id) if hd.khachHang_id else None
 
@@ -1257,32 +1321,244 @@ def pos_print_temp():
     )
 
 
-@app.route("/pos/pay", methods=["POST"])
+@app.post("/pos/pay")
 @login_required
 def pos_pay():
-    hd, payload = upsert_hoa_don_from_pos_cart(
-        TrangThaiHoaDonEnum.DA_THANH_TOAN,
-        rebuild_details=False  # thường không cần rebuild lúc pay (trừ khi bạn cho sửa phút chót)
-    )
+    hd, items, meta = pay_from_pos_cart(rebuild_details=True)
     if not hd:
         return redirect(url_for("pos_page"))
 
-    items, meta = payload
+    # clear giỏ pos sau khi chốt bill
+    session.pop("pos_cart", None)
+    session.pop("pos_current_bill_id", None)
+    session.modified = True
 
-    # Tạm thời dùng chung template cho dễ; sau này bạn đổi sang pos_print_paid.html
+    return redirect(url_for("pos_print_final", bill_id=hd.id))
+
+
+
+@app.get("/pos/print/final/<int:bill_id>")
+@login_required
+def pos_print_final(bill_id):
+    hd = HoaDon.query.get_or_404(bill_id)
+
+    cts = ChiTietHoaDon.query.filter_by(hoaDon_id=hd.id).all()
+
+    items = []
+    subtotal = 0
+    total_qty = 0
+    for ct in cts:
+        ten_mon = ct.mon.name if getattr(ct, "mon", None) else f"Món #{ct.mon_id}"
+        line_total = (ct.soLuong or 0) * (ct.donGia or 0)
+        items.append({"ten": ten_mon, "sl": ct.soLuong or 0, "tien": line_total})
+        subtotal += line_total
+        total_qty += (ct.soLuong or 0)
+
+    tax_rate = 0.08
+    tax_amount = subtotal * tax_rate
+    service_percent = int(getattr(hd, "service_percent", 0) or 0)
+    service_fee = subtotal * (service_percent / 100.0) if service_percent > 0 else 0
+    grand_total = subtotal + tax_amount + service_fee
+
+    meta = {
+        "subtotal": subtotal,
+        "total_qty": total_qty,
+        "tax_rate": tax_rate,
+        "tax_amount": tax_amount,
+        "service_percent": service_percent,
+        "service_fee": service_fee,
+        "grand_total": grand_total,
+        "now": datetime.datetime.now(),
+    }
+
+
+    khach = KhachHang.query.get(hd.khachHang_id) if hd.khachHang_id else None
+    meta.pop("khach", None)
+
+
+    qr_uri = None
+    if hd.loaiHoaDon == LoaiDungEnum.TAI_QUAN:
+        qr = QRCode.query.filter_by(
+            hoaDon_id=hd.id,
+            loaiQR=LoaiQREnum.NHAP_SO_BAN,
+            trangThai=TrangThaiQREnum.CON_HIEU_LUC
+        ).first()
+        if qr:
+            full_url = request.host_url.rstrip("/") + qr.noiDungQR
+            qr_uri = make_qr_data_uri(full_url)
+
     return render_template(
-        "pos_print_temp.html",  # đổi sau: "pos_print_paid.html"
+        "pos_print_final.html",
         empty_cart=False,
-        bill=hd,
+        hd=hd,
         items=items,
+        khach=khach,
+        qr_uri=qr_uri,
         **meta
     )
 
 
-@app.route("/orders/history")
+@app.route("/enter-table/<ma_qr>", methods=["GET", "POST"])
+def enter_table(ma_qr):
+    # GET: chỉ render form (có thể show hóa đơn nếu muốn)
+    if request.method == "POST":
+        raw = (request.form.get("so_ban") or "").strip()
+        try:
+            so_ban = int(raw)
+        except:
+            so_ban = 0
+
+        if so_ban <= 0:
+            return render_template("enter_table.html", hoa_don=None, error="Vui lòng nhập số bàn hợp lệ.")
+
+        confirm_table_by_qr(ma_qr, so_ban)
+
+        # đưa khách về trang chủ quán
+        return redirect(url_for("index"))
+
+    # GET: giữ code cũ nếu bạn cần show hoa_don
+    qr = QRCode.query.filter_by(
+        maQR=ma_qr,
+        loaiQR=LoaiQREnum.NHAP_SO_BAN,
+        trangThai=TrangThaiQREnum.CON_HIEU_LUC
+    ).first_or_404()
+    hd = HoaDon.query.get_or_404(qr.hoaDon_id)
+
+    if hd.loaiHoaDon != LoaiDungEnum.TAI_QUAN:
+        return "QR không hợp lệ cho hóa đơn mang đi.", 400
+
+    return render_template("enter_table.html", hoa_don=hd, error=None)
+
+
+
+@app.get("/pos/api/notifications")
 @login_required
-def order_history():
-    return render_template("order_history.html")
+def pos_api_notifications():
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role_str != "NHAN_VIEN":
+        return jsonify({"ok": False}), 403
+
+    notis = (ThongBao.query
+             .filter_by(is_read=False)
+             .order_by(ThongBao.created_at.desc())
+             .limit(20)
+             .all())
+
+    data = []
+    for tb in notis:
+        data.append({
+            "id": tb.id,
+            "message": tb.message,
+            "time": tb.created_at.strftime("%d/%m %H:%M"),
+            "hoaDonId": tb.hoaDon_id
+        })
+
+    return jsonify({
+        "ok": True,
+        "count": len(data),
+        "items": data
+    })
+
+
+@app.get("/pos/notifications/open/<int:noti_id>")
+@login_required
+def pos_open_notification(noti_id):
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role_str != "NHAN_VIEN":
+        return redirect(url_for("login_my_user"))
+
+    tb = ThongBao.query.get_or_404(noti_id)
+    tb.is_read = True
+    db.session.commit()
+
+    return redirect(url_for("print_kitchen_bill", bill_id=tb.hoaDon_id))
+
+
+@app.route("/pos/print/kitchen/<int:bill_id>" , methods = ["get"])
+def print_kitchen_bill(bill_id):
+    hd = (HoaDon.query
+          .options(
+              joinedload(HoaDon.chiTiet).joinedload(ChiTietHoaDon.mon),
+              joinedload(HoaDon.chiTiet)
+                  .joinedload(ChiTietHoaDon.topping_links)
+                  .joinedload(ChiTietHoaDonTopping.topping),
+              joinedload(HoaDon.khachHang),
+          )
+          .get_or_404(bill_id))
+
+    items = hd.chiTiet or []
+    return render_template("pos_print_kitchen.html", hd=hd, items=items)
+
+
+
+
+@app.route("/pos/order-history", endpoint="order_history")
+@login_required
+def pos_order_history():
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    if role_str != "NHAN_VIEN":
+        return redirect(url_for("login_my_user"))
+
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    base = (
+        HoaDon.query
+        .options(
+            selectinload(HoaDon.khachHang),
+            selectinload(HoaDon.chiTiet).selectinload(ChiTietHoaDon.mon),
+        )
+        .filter(HoaDon.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN)
+        .order_by(HoaDon.ngayThanhToan.desc())
+    )
+
+    if q:
+        base = base.outerjoin(KhachHang).filter(
+            or_(
+                HoaDon.maThamChieu.ilike(f"%{q}%"),
+                KhachHang.sdt.ilike(f"%{q}%"),
+            )
+        )
+
+    pagination = base.paginate(page=page, per_page=PAGE_SIZE, error_out=False)
+    bills = pagination.items
+
+    orders = []
+    for hd in bills:
+        kh = hd.khachHang
+        kh_ten = kh.name if kh else ""
+        kh_sdt = kh.sdt if kh else ""
+
+        items = []
+        item_count = 0
+        for ct in (hd.chiTiet or []):
+            qty = ct.soLuong or 0
+            price = ct.donGia or 0
+            item_count += qty
+            mon_name = ct.mon.name if ct.mon else ""
+            items.append({"name": mon_name, "qty": qty, "price": price})
+
+        orders.append({
+            "id": hd.id,
+            "ma": hd.maThamChieu or f"HD{hd.id}",
+            "order_type": hd.loaiHoaDon.value if hasattr(hd.loaiHoaDon, "value") else str(hd.loaiHoaDon),
+            "khach_ten": kh_ten,
+            "khach_sdt": kh_sdt,
+            "paid_at": hd.ngayThanhToan,
+            "total": hd.tongThanhToan or 0,
+            "item_count": item_count,
+            "items": items,
+        })
+
+    return render_template(
+        "order_history.html",
+        orders=orders,
+        pagination=pagination,
+        page=page,
+        q=q
+    )
+
+
 
 
 @app.route('/check-in', methods=['GET', 'POST'])

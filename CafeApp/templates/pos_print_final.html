@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Hóa đơn thanh toán</title>
+  <style>
+     .receipt {
+    width: 360px;
+    background: #fff;
+    margin: 20px auto;
+    padding: 14px 12px;
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  }
+    body { font-family: Arial, sans-serif; font-size: 12px; }
+    .center { text-align:center; }
+    .bold { font-weight:700; }
+    .muted { color:#666; font-size:11px; }
+    hr { border:none; border-top:1px dashed #999; margin:8px 0; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:4px 0; vertical-align:top; }
+    th { text-align:left; border-bottom:1px solid #ddd; }
+    .right { text-align:right; }
+    .qr img { width:160px; height:160px; }
+  </style>
+</head>
+
+<body >
+<div class="receipt">
+  <div class="center bold" style="font-size:16px;">HÓA ĐƠN THANH TOÁN</div>
+  <div class="center muted">Trạng thái: <b>ĐÃ THANH TOÁN</b></div>
+
+  <hr>
+
+  <div>
+    <div>Mã HĐ: <b>#{{ hd.id }}</b></div>
+    <div>Loại: <b>{{ hd.loaiHoaDon.value if hd.loaiHoaDon else "" }}</b></div>
+
+    {% if hd.loaiHoaDon and hd.loaiHoaDon.value == "TAI_QUAN" %}
+      <div>Số bàn:
+        <b>
+          {% if hd.soBan %}{{ hd.soBan }}{% else %}Chờ nhập số bàn{% endif %}
+        </b>
+      </div>
+    {% endif %}
+    {% if khach %}
+  <div >Khách: <b>{{ khach.name }}</b>   </div>
+{% endif %}
+
+  </div>
+
+  <hr>
+
+  {# ===== Danh sách món: bạn thay đúng biến items của bạn ===== #}
+  <table>
+  <thead>
+    <tr>
+      <th>Tên món</th>
+      <th class="right">SL</th>
+      <th class="right">Tiền</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if items and items|length > 0 %}
+      {% for it in items %}
+      <tr>
+        <td>{{ it.ten }}</td>
+        <td class="right">{{ it.sl }}</td>
+        <td class="right">{{ "{:,.0f}".format(it.tien).replace(",", ".") }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="3" class="muted">Không có món.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+
+  <hr>
+
+  <hr>
+
+<div>Tổng số món: <b>{{ total_qty }}</b></div>
+<div>Thời gian: <b>{{ now.strftime("%d/%m/%Y %H:%M:%S") }}</b></div>
+
+<hr>
+
+<div class="right">Tiền hàng: <b>{{ "{:,.0f}".format(subtotal).replace(",", ".") }}</b></div>
+<div class="right">Thuế ({{ (tax_rate*100)|round(0) }}%):
+  <b>{{ "{:,.0f}".format(tax_amount).replace(",", ".") }}</b>
+</div>
+<div class="right">Phí phục vụ ({{ service_percent }}%):
+  <b>{{ "{:,.0f}".format(service_fee).replace(",", ".") }}</b>
+</div>
+
+<hr>
+
+<div class="bold right" style="font-size:16px;">
+  TỔNG THANH TOÁN: {{ "{:,.0f}".format(grand_total).replace(",", ".") }}
+</div>
+
+
+  {% if qr_uri %}
+    <hr>
+    <div class="center qr">
+      <div class="bold">Quét QR để nhập số bàn</div>
+      <div class="muted">(Chỉ áp dụng cho hóa đơn TẠI QUÁN)</div>
+      <img src="{{ qr_uri }}" alt="QR nhập số bàn">
+    </div>
+  {% endif %}
+  </div>
+</body>
+</html>

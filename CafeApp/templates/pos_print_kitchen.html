@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Phiếu chế biến</title>
+  <style>
+    body{
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      background:#f3f5f7;
+      margin:0;
+      padding:24px 0;
+    }
+
+    /* khung “tờ giấy” giống hóa đơn thanh toán */
+    .paper{
+      width: 420px;              /* bạn có thể chỉnh 380-460 tùy ý */
+      max-width: 92vw;
+      margin: 0 auto;
+      background:#fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.12);
+      padding: 18px 18px 16px;
+    }
+
+    .title{
+      text-align:center;
+      font-weight:700;
+      font-size:16px;
+      letter-spacing:.3px;
+      margin-bottom:4px;
+    }
+
+    .info{
+      line-height:1.45;
+      margin: 8px 0 10px;
+    }
+
+    hr{
+      border:none;
+      border-top:1px dashed #999;
+      margin:10px 0;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+    }
+    th, td{ padding:6px 0; vertical-align:top; }
+    th{
+      text-align:left;
+      font-weight:700;
+      border-bottom:1px solid #ddd;
+      padding-bottom:4px;
+    }
+    .right{ text-align:right; white-space:nowrap; }
+
+    .opt{
+      font-size:11px;
+      color:#555;
+      margin-top:2px;
+      line-height:1.35;
+    }
+
+    /* khi in: bỏ nền + shadow cho giống giấy thật */
+    @media print{
+      body{ background:#fff; padding:0; }
+      .paper{
+        width:auto;
+        max-width:none;
+        margin:0;
+        border-radius:0;
+        box-shadow:none;
+        padding:0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="paper">
+    <div class="title">CHẾ BIẾN</div>
+
+    <hr>
+
+    <div class="info">
+      HĐ: <b>#{{ hd.id }}</b><br>
+      Bàn: <b>{{ hd.soBan }}</b><br>
+      {% if hd.khachHang %}
+        Khách: <b>{{ hd.khachHang.name }}</b> - {{ hd.khachHang.sdt }} <br>
+      {% endif %}
+        Thời gian: <b>{{ hd.ngayTao.strftime('%d/%m/%Y %H:%M') }}</b>
+    </div>
+
+    <hr>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Món</th>
+          <th class="right">SL</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ct in items %}
+          <tr>
+            <td>
+              <div>{{ ct.mon.name if ct.mon else ct.mon_id }}</div>
+
+              <div class="opt">
+                Size: <b>{{ ct.size.value if ct.size else "" }}</b>
+                | Đường: <b>{{ ct.mucDuong }}%</b>
+                | Đá: <b>{{ ct.mucDa }}%</b>
+                {% if ct.ghiChu %} | Note: <b>{{ ct.ghiChu }}</b>{% endif %}
+              </div>
+
+              {% if ct.topping_links and ct.topping_links|length > 0 %}
+                <div class="opt">
+                  Topping:
+                  {% for tl in ct.topping_links %}
+                    {{ tl.topping.name if tl.topping else tl.topping_id }} x{{ tl.qty }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+
+            <td class="right">{{ ct.soLuong }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <hr>
+  </div>
+</body>
+</html>

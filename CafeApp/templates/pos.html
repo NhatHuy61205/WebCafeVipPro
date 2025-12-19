@@ -1,139 +1,189 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS - Cafe Vip Pro</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 
-    <style>
-      .fee-left{
-  display: inline-flex;
+{% extends "layout/pos_header.html" %}
+{% set active_page = 'pos' %}
+
+{% block head_extra %}
+<style>
+        /* wrap full chiều ngang */
+.order-type-wrap {
+  margin: 12px 0 16px;
+}
+
+/* container 2 nút */
+.seg-tabs-full {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+}
+
+/* mỗi form chiếm 50% */
+.seg-tabs-full .seg-form {
+  flex: 1;
+  margin: 0;
+}
+
+/* nút dài full form */
+.seg-tabs-full .seg-btn {
+  width: 100%;
+  height: 52px;
+
+  display: flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+  justify-content: center;
+  gap: 10px;
+
+  border-radius: 14px;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+
+  font-size: 16px;
+  font-weight: 600;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* hover */
+.seg-tabs-full .seg-btn:hover {
+  border-color: #22c55e;
+}
+
+/* active */
+.seg-tabs-full .seg-btn.active {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: #fff;
+}
+
+.seg-tabs-full .seg-btn.active i {
+  color: #fff;
 }
 
 
-.sum-money{
-  text-align:right;
-  min-width: 90px;   /* đủ để canh thẳng hàng tiền */
-}
-
-
-        #taxCheck{
-  vertical-align: middle;
-  margin-top: 0px;
-}
-
-        /* ===== Service fee input (POS style) ===== */
-.fee-input{
-  width:48px;
-  height:22px;
-  padding:2px 4px;
-  font-size:13px;
-  text-align:right;
-  border:1px solid #ccc;
-  border-radius:6px;
-  outline:none;
-}
-
-.fee-input:focus{
-  border-color:#28a745;
-  box-shadow:0 0 0 1px rgba(40,167,69,.2);
-}
-
-/* Ẩn spinner nếu browser vẫn render */
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button{
-  -webkit-appearance:none;
-  margin:0;
-}
-input[type=number]{
-  -moz-appearance:textfield;
-}
-
-  .cart-area { background:#fff; border-left:1px solid #ddd; height: calc(100vh - 50px); }
-  .inv-top { padding:10px 12px; border-bottom:1px solid #eee; background:#fff; }
-  .inv-title { font-weight:900; font-size:18px; text-align:center; margin:0; }
-  .inv-code { font-weight:800; color:#28a745; }
-
-  .seg-tabs { display:flex; gap:8px; padding:10px 12px; border-bottom:1px solid #eee; background:#f8f9fa; }
-  .seg-btn{
-    flex:1; text-align:center; font-size:14px; padding:10px 6px;
-    border:1px solid #ddd; border-radius:10px; cursor:pointer; background:#fff;
+        .fee-left{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
   }
-  .seg-btn.active{ background:#28a745; border-color:#28a745; color:#fff; font-weight:800; }
 
-  .inv-items-wrap{
-  flex: 1 1 auto;
-  min-height: 0;   /* quan trọng để scroll hoạt động trong flex */
-  overflow: hidden;
-}
-  .inv-items-box{
-    border:1px solid #eee; border-radius:12px; overflow:hidden;
+
+  .sum-money{
+    text-align:right;
+    min-width: 90px;   /* đủ để canh thẳng hàng tiền */
+  }
+
+
+          #taxCheck{
+    vertical-align: middle;
+    margin-top: 0px;
+  }
+
+          /* ===== Service fee input (POS style) ===== */
+  .fee-input{
+    width:48px;
+    height:22px;
+    padding:2px 4px;
+    font-size:13px;
+    text-align:right;
+    border:1px solid #ccc;
+    border-radius:6px;
+    outline:none;
+  }
+
+  .fee-input:focus{
+    border-color:#28a745;
+    box-shadow:0 0 0 1px rgba(40,167,69,.2);
+  }
+
+  /* Ẩn spinner nếu browser vẫn render */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  input[type=number]{
+    -moz-appearance:textfield;
+  }
+
+    .cart-area { background:#fff; border-left:1px solid #ddd; height: calc(100vh - 50px); }
+    .inv-top { padding:10px 12px; border-bottom:1px solid #eee; background:#fff; }
+    .inv-title { font-weight:900; font-size:18px; text-align:center; margin:0; }
+    .inv-code { font-weight:800; color:#28a745; }
+
+    .seg-tabs { display:flex; gap:8px; padding:10px 12px; border-bottom:1px solid #eee; background:#f8f9fa; }
+    .seg-btn{
+      flex:1; text-align:center; font-size:14px; padding:10px 6px;
+      border:1px solid #ddd; border-radius:10px; cursor:pointer; background:#fff;
+    }
+    .seg-btn.active{ background:#28a745; border-color:#28a745; color:#fff; font-weight:800; }
+
+    .inv-items-wrap{
+    flex: 1 1 auto;
+    min-height: 0;   /* quan trọng để scroll hoạt động trong flex */
+    overflow: hidden;
+  }
+    .inv-items-box{
+      border:1px solid #eee; border-radius:12px; overflow:hidden;
+      background:#fff;
+    }
+    .inv-items-head{ background:#f3f4f6; padding:8px 10px; font-weight:800; font-size:13px; }
+    .inv-items-body{
+    height: 100%;
+    max-height: none;
+    overflow-y: auto;
+  }
+    .table-cart th { font-size:12px; padding:8px; background:#f3f4f6; }
+    .table-cart td { font-size:13px; padding:10px 8px; vertical-align:middle; }
+
+    .inv-sum{
+    flex: 0 0 auto;
+    padding: 10px 12px;
     background:#fff;
+    border-top: 1px solid #eee;
   }
-  .inv-items-head{ background:#f3f4f6; padding:8px 10px; font-weight:800; font-size:13px; }
-  .inv-items-body{
-  height: 100%;
-  max-height: none;
-  overflow-y: auto;
-}
-  .table-cart th { font-size:12px; padding:8px; background:#f3f4f6; }
-  .table-cart td { font-size:13px; padding:10px 8px; vertical-align:middle; }
+    .sum-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;   /* ↓ */
+    font-size:13px;    }
+    .sum-row strong{ font-weight:900; }
+    .sum-total{
+      display:flex; justify-content:space-between; align-items:center;
+        padding:6px 10px;    /* ↓ */
+    margin:6px 0;        /* ↓ */
+    border-radius:10px;
+      background:#fff3e6; border:1px solid #ffe0c2;
 
-  .inv-sum{
-  flex: 0 0 auto;
-  padding: 10px 12px;
-  background:#fff;
-  border-top: 1px solid #eee;
-}
-  .sum-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;   /* ↓ */
-  font-size:13px;    }
-  .sum-row strong{ font-weight:900; }
-  .sum-total{
-    display:flex; justify-content:space-between; align-items:center;
-      padding:6px 10px;    /* ↓ */
-  margin:6px 0;        /* ↓ */
-  border-radius:10px;
-    background:#fff3e6; border:1px solid #ffe0c2;
+    }
+    .sum-total .label{ font-weight:900; font-size:13px; }
+    .sum-total .value{ font-weight:900; font-size:20px;  color:#d0021b; }
 
+   .inv-actions{
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    background:#fff;
+    border-top: 1px solid #eee;
   }
-  .sum-total .label{ font-weight:900; font-size:13px; }
-  .sum-total .value{ font-weight:900; font-size:20px;  color:#d0021b; }
+    .btn-pay { width:100%; background:#fd7e14; color:#fff; font-weight:900; border-radius:12px; padding:8px; border:none; font-size:14px; }
+    .btn-pay:hover{ background:#e96b02; }
+    .btn-soft{ border-radius:12px; }
+          .customer-box{
+    border:1px solid #e9ecef;
+    border-radius:10px;
+    background:#fff;
+    padding:6px 8px;        /* ↓ giảm mạnh */
+    font-size:13px;
+  }
 
- .inv-actions{
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  background:#fff;
-  border-top: 1px solid #eee;
-}
-  .btn-pay { width:100%; background:#fd7e14; color:#fff; font-weight:900; border-radius:12px; padding:8px; border:none; font-size:14px; }
-  .btn-pay:hover{ background:#e96b02; }
-  .btn-soft{ border-radius:12px; }
-        .customer-box{
-  border:1px solid #e9ecef;
-  border-radius:10px;
-  background:#fff;
-  padding:6px 8px;        /* ↓ giảm mạnh */
-  font-size:13px;
-}
+  .customer-box .text-muted{
+    font-size:11px;
+  }
 
-.customer-box .text-muted{
-  font-size:11px;
-}
-
-.customer-box .btn{
-  padding:3px 8px;
-  font-size:12px;
-}
+  .customer-box .btn{
+    padding:3px 8px;
+    font-size:12px;
+  }
 
     </style>
-
-
-    <style>
+<style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; overflow: hidden; }
 
         /*  HEADER */
@@ -203,45 +253,10 @@ input[type=number]{
         .layout-split .cart-area { display: flex; flex: 0 0 33.33%; max-width: 33.33%; }
 
     </style>
-</head>
-<body>
+{% endblock %}
+{% block content %}
 
-<div class="pos-header">
-    <div class="d-flex align-items-center">
-        <div class="header-logo">
-            <i class="fas fa-leaf mr-2"></i> CAFE VIP PRO
-        </div>
 
-        <button class="header-btn active"><i class="fas fa-utensils"></i> Order Online</button>
-        <button class="header-btn"><i class="fas fa-truck"></i> Số giao hàng</button>
-    </div>
-    <div class="d-flex align-items-center">
-        <span class="mr-3"><i class="fas fa-user"></i> {{ current_user.name }}</span>
-        <i class="fas fa-sync header-icon" title="Đồng bộ"></i>
-        <i class="fas fa-cloud header-icon" title="Đám mây"></i>
-        <div class="dropdown">
-            <i class="fas fa-bars header-icon dropdown-toggle"
-               id="posMenu"
-               data-toggle="dropdown"
-               aria-haspopup="true"
-               aria-expanded="false"
-               style="cursor:pointer">
-            </i>
-
-            <div class="dropdown-menu dropdown-menu-right">
-                <a class="dropdown-item" href="{{ url_for('order_history') }}">
-                    <i class="fas fa-receipt mr-2"></i> Lịch sử đơn hàng
-                </a>
-
-                <div class="dropdown-divider"></div>
-
-                <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
-                    <i class="fas fa-sign-out-alt mr-2"></i> Đăng xuất
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 
 <div class="container-fluid p-0">
@@ -322,14 +337,30 @@ input[type=number]{
             </div>
 
             <!-- Loại hóa đơn -->
-            <div class="seg-tabs">
-                <div class="seg-btn active" onclick="setOrderType('TAI_QUAN', this)">
-                    <i class="fas fa-chair mr-1"></i> Tại quán
-                </div>
-                <div class="seg-btn" onclick="setOrderType('MANG_DI', this)">
-                    <i class="fas fa-shopping-bag mr-1"></i> Mang đi
-                </div>
-            </div>
+            <div class="order-type-wrap">
+  <div class="seg-tabs seg-tabs-full">
+    <form method="post" action="{{ url_for('pos_set_order_type') }}" class="seg-form">
+      <input type="hidden" name="order_type" value="TAI_QUAN">
+      <button type="submit"
+              class="seg-btn {% if pos_order_type == 'TAI_QUAN' %}active{% endif %}">
+        <i class="fas fa-chair"></i>
+        <span>Tại quán</span>
+      </button>
+    </form>
+
+    <form method="post" action="{{ url_for('pos_set_order_type') }}" class="seg-form">
+      <input type="hidden" name="order_type" value="MANG_DI">
+      <button type="submit"
+              class="seg-btn {% if pos_order_type == 'MANG_DI' %}active{% endif %}">
+        <i class="fas fa-shopping-bag"></i>
+        <span>Mang đi</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+
+
 
             <!-- Items box (PHẦN NÀY SẼ CUỘN) -->
             <div class="inv-items-wrap flex-grow-1" style="min-height:0; overflow:hidden;">
@@ -423,31 +454,31 @@ input[type=number]{
                     <span id="taxValue">0</span>
                 </div>
 
-              <!-- form rời: không phá các form khác -->
-<form id="serviceFeeForm" method="post" action="{{ url_for('pos_set_service_fee') }}" style="display:none;"></form>
+                <!-- form rời: không phá các form khác -->
+                <form id="serviceFeeForm" method="post" action="{{ url_for('pos_set_service_fee') }}"
+                      style="display:none;"></form>
 
-<div class="sum-row">
+                <div class="sum-row">
   <span class="fee-left">
     <span>Phí phục vụ:</span>
     <input
-      id="serviceFee"
-      type="number"
-      name="service_percent"
-      form="serviceFeeForm"
-      class="fee-input"
-      min="0"
-      max="100"
-      step="1"
-      value="{{ session.get('pos_service_percent', 0) }}"
-      oninput="this.value = String(this.value).replace(/[^0-9]/g,''); renderCart();"
-      onkeydown="if(event.key==='Enter'){ document.getElementById('serviceFeeForm').submit(); }"
+            id="serviceFee"
+            type="number"
+            name="service_percent"
+            form="serviceFeeForm"
+            class="fee-input"
+            min="0"
+            max="100"
+            step="1"
+            value="{{ session.get('pos_service_percent', 0) }}"
+            oninput="this.value = String(this.value).replace(/[^0-9]/g,''); renderCart();"
+            onkeydown="if(event.key==='Enter'){ document.getElementById('serviceFeeForm').submit(); }"
     />
     <span>%</span>
   </span>
 
-  <span id="serviceValue" class="sum-money">0</span>
-</div>
-
+                    <span id="serviceValue" class="sum-money">0</span>
+                </div>
 
 
                 <div class="sum-total">
@@ -478,9 +509,9 @@ input[type=number]{
                     </div>
 
                     <div class="col-4 pl-1">
-                        <form method="post" action="{{ url_for('pos_pay') }}" class="m-0">
+                        <form method="post" action="{{ url_for('pos_pay') }}" class="m-0" target="_blank">
                             <input type="hidden" name="page" value="{{ page }}">
-                            <button type="submit" class="btn-pay">
+                            <button type="submit" class="btn-pay" >
                                 <i class="fas fa-cash-register mr-1"></i> Thanh toán
                             </button>
                         </form>
@@ -494,6 +525,120 @@ input[type=number]{
     </div>
 </div>
 
+
+{% if modal_ctx %}
+{% set mon = modal_ctx.mon %}
+{% set form = modal_ctx.form %}
+{% set errors = modal_ctx.errors %}
+{% set unit_price = modal_ctx.unit_price %}
+{% set total_price = modal_ctx.total_price %}
+{% set desc_list = modal_ctx.desc_list %}
+{% set SIZE_OPTS = modal_ctx.SIZE_OPTS %}
+{% set SUGAR_OPTS = modal_ctx.SUGAR_OPTS %}
+{% set ICE_OPTS = modal_ctx.ICE_OPTS %}
+{% set TOPPING_OPTS = modal_ctx.TOPPING_OPTS %}
+{% set edit_key = modal_ctx.edit_key %}
+{% set ui_mode = modal_ctx.ui_mode %}
+{% set close_url = modal_ctx.close_url %}
+{% set form_action = modal_ctx.form_action %}
+
+{% include "_drink_modal_body.html" %}
+{% endif %}
+{% include "layout/_flash_modal.html" %}
+{# ===== MODAL KHÁCH HÀNG (server-side show) ===== #}
+{% set open_customer_modal = request.args.get('customer_modal') %}
+{% set open_pay_confirm = request.args.get('pay_confirm') %}
+
+{% if open_customer_modal %}
+<div class="modal-backdrop fade show"></div>
+{% endif %}
+
+<div class="modal fade {% if open_customer_modal %}show{% endif %}" id="customerModal"
+     tabindex="-1" role="dialog"
+     style="{% if open_customer_modal %}display:block;{% else %}display:none;{% endif %}">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content" style="border-radius:14px;">
+            <div class="modal-header">
+                <h5 class="modal-title">Thêm thông tin khách hàng</h5>
+                <a class="close" aria-label="Close"
+                   href="{{ url_for('pos_page', page=page) }}">
+                    <span aria-hidden="true">&times;</span>
+                </a>
+            </div>
+
+            <form method="post" action="{{ url_for('pos_customer_save') }}">
+                <div class="modal-body">
+                    {% set cust = session.get('pos_customer') or {} %}
+
+                    <div class="form-group">
+                        <label>Tên khách hàng</label>
+                        <input type="text" class="form-control" name="customer_name"
+                               value="{{ cust.get('name','') }}" placeholder="Ví dụ: Nguyễn Văn A">
+                    </div>
+
+                    <div class="form-group mb-0">
+                        <label>Số điện thoại <span class="text-danger">*</span></label>
+                        <input type="text"
+                               class="form-control"
+                               name="customer_phone"
+                               value="{{ cust.get('phone','') }}"
+                               placeholder="Ví dụ: 0901234567"
+                               inputmode="numeric"
+                               pattern="[0-9]*"
+                               maxlength="10"
+                               oninput="this.value=this.value.replace(/[^0-9]/g,'');"
+                               required>
+
+
+                        {% if session.get('customer_err') %}
+                        <div class="text-danger mt-2" style="font-size:13px;">
+                            {{ session.pop('customer_err') }}
+                        </div>
+                        {% else %}
+                        <small class="text-muted">SDT bắt buộc để thanh toán</small>
+                        {% endif %}
+                    </div>
+
+                    <input type="hidden" name="page" value="{{ page }}">
+                </div>
+
+                <div class="modal-footer">
+                    <a class="btn btn-light" href="{{ url_for('pos_page', page=page) }}">Hủy</a>
+                    <button type="submit" class="btn btn-success">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% if open_pay_confirm %}
+<div class="modal-backdrop fade show"></div>
+<div class="modal fade show" tabindex="-1" role="dialog" style="display:block;">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content" style="border-radius:14px;">
+            <div class="modal-header">
+                <h5 class="modal-title">Thiếu thông tin khách hàng</h5>
+                <a class="close" aria-label="Close" href="{{ url_for('pos_page', page=page) }}">
+                    <span aria-hidden="true">&times;</span>
+                </a>
+            </div>
+            <div class="modal-body">
+                Chưa có <b>số điện thoại</b>. Bạn có muốn thêm để tiếp tục thanh toán không?
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-light" href="{{ url_for('pos_page', page=page) }}">Để sau</a>
+                <a class="btn btn-success"
+                   href="{{ url_for('pos_page', page=page, customer_modal=1) }}">
+                    Thêm SDT
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
 <script>
     // ===== cart được inject từ server pos_cart =====
     let cart = {};
@@ -508,7 +653,7 @@ input[type=number]{
       {% endfor %}
     {% endif %}
 
-    let currentOrderType = 'TAI_QUAN';
+
 
     function formatMoney(amount) {
       return (amount || 0).toLocaleString('vi-VN');
@@ -660,134 +805,14 @@ servicePercent = Math.max(0, Math.min(100, servicePercent));
       renderCart(); // renderCart sẽ tự hide giỏ
     }
 
-    function setOrderType(type, btnElement) {
-      currentOrderType = type;
-      document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
-      btnElement.classList.add('active');
-    }
 
-    function payOrder() {
-      if (Object.keys(cart).length === 0) return alert('Chưa chọn món!');
-      alert(`Thanh toán thành công ${document.getElementById('finalTotal').innerText} VNĐ\nLoại: ${currentOrderType}`);
-      cancelOrder();
-    }
+
+
 
     // ✅ Khi load trang: render giỏ + tự quyết định hiện/ẩn
     renderCart();
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-
-{% if modal_ctx %}
-{% set mon = modal_ctx.mon %}
-{% set form = modal_ctx.form %}
-{% set errors = modal_ctx.errors %}
-{% set unit_price = modal_ctx.unit_price %}
-{% set total_price = modal_ctx.total_price %}
-{% set desc_list = modal_ctx.desc_list %}
-{% set SIZE_OPTS = modal_ctx.SIZE_OPTS %}
-{% set SUGAR_OPTS = modal_ctx.SUGAR_OPTS %}
-{% set ICE_OPTS = modal_ctx.ICE_OPTS %}
-{% set TOPPING_OPTS = modal_ctx.TOPPING_OPTS %}
-{% set edit_key = modal_ctx.edit_key %}
-{% set ui_mode = modal_ctx.ui_mode %}
-{% set close_url = modal_ctx.close_url %}
-{% set form_action = modal_ctx.form_action %}
-
-{% include "_drink_modal_body.html" %}
-{% endif %}
-{% include "layout/_flash_modal.html" %}
-{# ===== MODAL KHÁCH HÀNG (server-side show) ===== #}
-{% set open_customer_modal = request.args.get('customer_modal') %}
-{% set open_pay_confirm = request.args.get('pay_confirm') %}
-
-{% if open_customer_modal %}
-<div class="modal-backdrop fade show"></div>
-{% endif %}
-
-<div class="modal fade {% if open_customer_modal %}show{% endif %}" id="customerModal"
-     tabindex="-1" role="dialog"
-     style="{% if open_customer_modal %}display:block;{% else %}display:none;{% endif %}">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content" style="border-radius:14px;">
-            <div class="modal-header">
-                <h5 class="modal-title">Thêm thông tin khách hàng</h5>
-                <a class="close" aria-label="Close"
-                   href="{{ url_for('pos_page', page=page) }}">
-                    <span aria-hidden="true">&times;</span>
-                </a>
-            </div>
-
-            <form method="post" action="{{ url_for('pos_customer_save') }}">
-                <div class="modal-body">
-                    {% set cust = session.get('pos_customer') or {} %}
-
-                    <div class="form-group">
-                        <label>Tên khách hàng</label>
-                        <input type="text" class="form-control" name="customer_name"
-                               value="{{ cust.get('name','') }}" placeholder="Ví dụ: Nguyễn Văn A">
-                    </div>
-
-                    <div class="form-group mb-0">
-                        <label>Số điện thoại <span class="text-danger">*</span></label>
-                        <input type="text"
-                               class="form-control"
-                               name="customer_phone"
-                               value="{{ cust.get('phone','') }}"
-                               placeholder="Ví dụ: 0901234567"
-                               inputmode="numeric"
-                               pattern="[0-9]*"
-                               maxlength="10"
-                               oninput="this.value=this.value.replace(/[^0-9]/g,'');"
-                               required>
 
 
-                        {% if session.get('customer_err') %}
-                        <div class="text-danger mt-2" style="font-size:13px;">
-                            {{ session.pop('customer_err') }}
-                        </div>
-                        {% else %}
-                        <small class="text-muted">SDT bắt buộc để thanh toán</small>
-                        {% endif %}
-                    </div>
-
-                    <input type="hidden" name="page" value="{{ page }}">
-                </div>
-
-                <div class="modal-footer">
-                    <a class="btn btn-light" href="{{ url_for('pos_page', page=page) }}">Hủy</a>
-                    <button type="submit" class="btn btn-success">Lưu</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% if open_pay_confirm %}
-<div class="modal-backdrop fade show"></div>
-<div class="modal fade show" tabindex="-1" role="dialog" style="display:block;">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content" style="border-radius:14px;">
-            <div class="modal-header">
-                <h5 class="modal-title">Thiếu thông tin khách hàng</h5>
-                <a class="close" aria-label="Close" href="{{ url_for('pos_page', page=page) }}">
-                    <span aria-hidden="true">&times;</span>
-                </a>
-            </div>
-            <div class="modal-body">
-                Chưa có <b>số điện thoại</b>. Bạn có muốn thêm để tiếp tục thanh toán không?
-            </div>
-            <div class="modal-footer">
-                <a class="btn btn-light" href="{{ url_for('pos_page', page=page) }}">Để sau</a>
-                <a class="btn btn-success"
-                   href="{{ url_for('pos_page', page=page, customer_modal=1) }}">
-                    Thêm SDT
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-</body>
-</html>
+{% endblock %}
