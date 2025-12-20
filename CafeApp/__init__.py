@@ -14,6 +14,7 @@ PHONE_RE = re.compile(r"^0\d{9}$")
 
 VIETQR_CLIENT_ID = "12fd8a9e-7343-472b-ae9b-a370ac11d4a8"
 VIETQR_API_KEY = "556aae93-e87b-4a41-ab76-6e040379eae2"
+VIETQR_TEMPLATE_ID = "akGFPiZ"
 
 # Tài khoản nhận tiền của bạn
 BANK_ACQ_ID = "970422"          # mã ngân hàng (acqId)

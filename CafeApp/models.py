@@ -206,6 +206,15 @@ class TrangThaiNguyenLieuEnum(Enum):
     SAP_HET = "SAP_HET"
     HET_HANG = "HET_HANG"
 
+class NhomNguyenLieuEnum(Enum):
+    CA_PHE = "Cà phê"
+    TRA = "Trà"
+    SUA = "Sữa"
+    DUONG = "Đường"
+    TOPPING = "Topping"
+    DA = "Đá"
+    KHAC = "Khác"
+
 
 class NguyenLieu(Base):
     congThuc = relationship("CongThuc", backref="nguyenLieu", lazy=True)
@@ -214,8 +223,8 @@ class NguyenLieu(Base):
     soLuongTon = Column(Float, default=0.0)
     giaMuaToiThieu = Column(Float, default=0.0)
     trangThai = Column(SqlEnum(TrangThaiNguyenLieuEnum),default=TrangThaiNguyenLieuEnum.CON_HANG)
-
-
+    soLuongToiThieu = Column(Float, default=0.0)
+    nhom = Column(SqlEnum(NhomNguyenLieuEnum), default=NhomNguyenLieuEnum.KHAC)
 
 class PhieuNhap(Base):
     chiTiet = relationship("ChiTietPhieuNhap", backref="phieuNhap", lazy=True)

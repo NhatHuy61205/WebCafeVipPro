@@ -5,10 +5,14 @@ from flask import abort
 from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Tuple
+import datetime as dt
+from sqlalchemy import func
+
 from CafeApp import db, app
 from flask import session
 from CafeApp.models import NhanVienCuaHang, SizeEnum, Topping, MonTopping, TrangThaiHoaDonEnum, ChiTietHoaDon, \
-    LoaiDungEnum, HoaDon, ChiTietHoaDonTopping, KhachHang, LoaiQREnum, TrangThaiQREnum, QRCode, ThongBao
+    LoaiDungEnum, HoaDon, ChiTietHoaDonTopping, KhachHang, LoaiQREnum, TrangThaiQREnum, QRCode, ThongBao, Mon, \
+    NguyenLieu, NhomNguyenLieuEnum
 
 
 @dataclass
@@ -233,6 +237,92 @@ def get_or_create_khach_hang_from_pos():
     return kh
 
 
+
+# ===== DRINK FORM / CART SERVICE (DÙNG CHUNG MENU + POS) =====
+
+def parse_int(value, default=1, min_v=1):
+    try:
+        n = int(str(value).strip())
+    except:
+        n = default
+    if n < min_v:
+        n = min_v
+    return n
+
+
+def get_drink_form_defaults(cart: dict, edit_key: str = "") -> dict:
+    form = {"size": "S", "duong": "70", "da": "70", "topping": [], "note": "", "quantity": "1"}
+
+    edit_key = (edit_key or "").strip()
+    if edit_key and cart and edit_key in cart:
+        old = cart.get(edit_key, {}) or {}
+        opts = old.get("options", {}) or {}
+        form = {
+            "size": (opts.get("size") or "S"),
+            "duong": str(opts.get("duong") or "70"),
+            "da": str(opts.get("da") or "70"),
+            "topping": opts.get("topping") or [],
+            "note": opts.get("note") or "",
+            "quantity": str(old.get("quantity") or 1),
+        }
+    return form
+
+
+def make_drink_option_key(mon_id: int, size: str, duong: str, da: str, toppings: list, note: str) -> str:
+    size = (size or "S").strip()
+    duong = (duong or "70").strip()
+    da = (da or "70").strip()
+    note = (note or "").strip()
+    toppings = toppings or []
+    return f"{mon_id}|{size}|{duong}|{da}|{','.join(sorted(toppings))}|{note}"
+
+
+def upsert_drink_to_cart(
+    cart: dict,
+    mon,
+    size: str,
+    duong: str,
+    da: str,
+    toppings: list,
+    note: str,
+    qty_raw,
+    edit_key: str = "",
+):
+
+    cart = cart or {}
+
+    TOPPING_OPTS = get_topping_opts_for_mon(mon)
+    toppings = normalize_topping_codes(toppings or [], TOPPING_OPTS)
+
+    qty = parse_int(qty_raw, default=1, min_v=1)
+
+    unit_price, desc_list = build_drink(mon, size, duong, da, toppings)
+    option_key = make_drink_option_key(mon.id, size, duong, da, toppings, note)
+
+    edit_key = (edit_key or "").strip()
+    if edit_key and edit_key in cart:
+        cart.pop(edit_key, None)
+
+    if option_key not in cart:
+        cart[option_key] = {
+            "id": mon.id,
+            "name": mon.name,
+            "price": float(unit_price),
+            "quantity": 0,
+            "options": {
+                "size": (size or "S").strip(),
+                "duong": (duong or "70").strip(),
+                "da": (da or "70").strip(),
+                "topping": toppings,
+                "note": (note or "").strip(),
+                "desc": desc_list,
+            },
+        }
+
+    cart[option_key]["quantity"] += qty
+    return cart, option_key, unit_price, desc_list, qty
+
+
 # Lưu Hóa Đơn
 
 def _coerce_size(size_val):
@@ -308,9 +398,10 @@ def upsert_hoa_don_from_pos_cart(
         price = float(it.get("price", 0) or 0)
 
         opt = it.get("options") or {}
-        size = _coerce_size(opt.get("size"))
-        muc_duong = int(opt.get("duong", opt.get("mucDuong", 100)) or 100)
-        muc_da = int(opt.get("da", opt.get("mucDa", 100)) or 100)
+        has_opt = bool(opt.get("size") or opt.get("duong") or opt.get("da") or opt.get("topping"))
+        size = _coerce_size(opt.get("size")) if has_opt else None
+        muc_duong = int(opt.get("duong", opt.get("mucDuong", 100)) or 100) if has_opt else None
+        muc_da = int(opt.get("da", opt.get("mucDa", 100)) or 100) if has_opt else None
         topping_raw = opt.get("topping") or []
         note = (opt.get("note") or "").strip()
 
@@ -543,3 +634,318 @@ def confirm_table_by_qr(ma_qr: str, so_ban: int):
 
     db.session.commit()
     return hd
+
+
+# Báo cáo thống kê
+
+def _start_of_week(d: dt.date) -> dt.date:
+    return d - dt.timedelta(days=d.weekday())  # Monday
+
+
+def _month_range(d: dt.date):
+    start = d.replace(day=1)
+    if start.month == 12:
+        end = start.replace(year=start.year + 1, month=1, day=1)
+    else:
+        end = start.replace(month=start.month + 1, day=1)
+    return start, end
+
+
+def dashboard_range(mode: str, raw_from: str = "", raw_to: str = ""):
+    """Return: (mode, start_date, end_date_exclusive, time_label)"""
+    mode = (mode or "WEEK").upper()
+    today = dt.date.today()
+
+    start_date = None
+    end_date = None
+
+    if mode == "TODAY":
+        start_date = today
+        end_date = today + dt.timedelta(days=1)
+        time_label = today.strftime("%d/%m/%Y")
+
+    elif mode == "MONTH":
+        start_date, end_date = _month_range(today)
+        time_label = f"{start_date.strftime('%d/%m/%Y')} - {(end_date - dt.timedelta(days=1)).strftime('%d/%m/%Y')}"
+
+    elif mode == "CUSTOM":
+        try:
+            if raw_from:
+                start_date = dt.datetime.strptime(raw_from, "%Y-%m-%d").date()
+            if raw_to:
+                to_date = dt.datetime.strptime(raw_to, "%Y-%m-%d").date()
+                end_date = to_date + dt.timedelta(days=1)
+        except:
+            start_date = None
+            end_date = None
+
+        if not start_date or not end_date:
+            mode = "WEEK"
+            start_date = _start_of_week(today)
+            end_date = start_date + dt.timedelta(days=7)
+
+        time_label = f"{start_date.strftime('%d/%m/%Y')} - {(end_date - dt.timedelta(days=1)).strftime('%d/%m/%Y')}"
+
+    else:
+        mode = "WEEK"
+        start_date = _start_of_week(today)
+        end_date = start_date + dt.timedelta(days=7)
+        time_label = f"{start_date.strftime('%d/%m/%Y')} - {(end_date - dt.timedelta(days=1)).strftime('%d/%m/%Y')}"
+
+    return mode, start_date, end_date, time_label
+
+
+def get_dashboard_data(mode: str, raw_from: str = "", raw_to: str = ""):
+    mode, start_date, end_date, time_label = dashboard_range(mode, raw_from, raw_to)
+
+    start_dt = dt.datetime.combine(start_date, dt.time.min)
+    end_dt = dt.datetime.combine(end_date, dt.time.min)
+
+    # ===== KPI =====
+    base_hd = (
+        db.session.query(HoaDon)
+        .filter(HoaDon.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN)
+        .filter(HoaDon.ngayThanhToan >= start_dt, HoaDon.ngayThanhToan < end_dt)
+    )
+
+    revenue = base_hd.with_entities(func.coalesce(func.sum(HoaDon.tongThanhToan), 0)).scalar() or 0
+    orders = base_hd.count()
+
+    items_sold = (
+        db.session.query(func.coalesce(func.sum(ChiTietHoaDon.soLuong), 0))
+        .join(HoaDon, HoaDon.id == ChiTietHoaDon.hoaDon_id)
+        .filter(HoaDon.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN)
+        .filter(HoaDon.ngayThanhToan >= start_dt, HoaDon.ngayThanhToan < end_dt)
+        .scalar() or 0
+    )
+
+    avg_order_value = (revenue / orders) if orders else 0
+
+    kpi = {
+        "revenue": float(revenue),
+        "revenue_pct": None,
+        "orders": int(orders),
+        "orders_pct": None,
+        "items_sold": int(items_sold),
+        "avg_order_value": float(avg_order_value)
+    }
+
+    # ===== CHART: doanh thu theo ngày =====
+    rows_rev = (
+        db.session.query(
+            func.date(HoaDon.ngayThanhToan).label("d"),
+            func.coalesce(func.sum(HoaDon.tongThanhToan), 0).label("rev")
+        )
+        .filter(HoaDon.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN)
+        .filter(HoaDon.ngayThanhToan >= start_dt, HoaDon.ngayThanhToan < end_dt)
+        .group_by(func.date(HoaDon.ngayThanhToan))
+        .order_by(func.date(HoaDon.ngayThanhToan))
+        .all()
+    )
+    rev_map = {r.d: float(r.rev) for r in rows_rev}
+
+    labels_day, data_day = [], []
+    cur = start_date
+    while cur < end_date:
+        labels_day.append(cur.strftime("%d/%m"))
+        data_day.append(rev_map.get(cur, 0))
+        cur += dt.timedelta(days=1)
+
+    # ===== CHART: top danh mục bán chạy (theo số lượng) =====
+    nhom_name_map = {
+        "CA_PHE": "Cà phê",
+        "TRA": "Trà",
+        "BANH_NGOT": "Bánh ngọt",
+        "KHAC": "Khác"
+    }
+
+    cat_rows = (
+        db.session.query(
+            Mon.nhom.label("nhom"),
+            func.coalesce(func.sum(ChiTietHoaDon.soLuong), 0).label("qty")
+        )
+        .join(ChiTietHoaDon, ChiTietHoaDon.mon_id == Mon.id)
+        .join(HoaDon, HoaDon.id == ChiTietHoaDon.hoaDon_id)
+        .filter(HoaDon.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN)
+        .filter(HoaDon.ngayThanhToan >= start_dt, HoaDon.ngayThanhToan < end_dt)
+        .group_by(Mon.nhom)
+        .order_by(func.sum(ChiTietHoaDon.soLuong).desc())
+        .all()
+    )
+
+    top_cat_labels, top_cat_data = [], []
+    for nhom, qty in cat_rows:
+        key = getattr(nhom, "name", None) or (str(nhom) if nhom else "KHAC")
+        top_cat_labels.append(nhom_name_map.get(key, key))
+        top_cat_data.append(int(qty or 0))
+
+    charts = {
+        "revenue_by_day": {"labels": labels_day, "data": data_day},
+        "top_categories": {"labels": top_cat_labels, "data": top_cat_data}
+    }
+
+    # ===== TABLE: chi tiết bán hàng theo món =====
+    item_rows_q = (
+        db.session.query(
+            Mon.name.label("name"),
+            func.coalesce(func.sum(ChiTietHoaDon.soLuong), 0).label("qty"),
+            func.coalesce(func.sum(ChiTietHoaDon.thanhTien), 0).label("revenue")
+        )
+        .join(ChiTietHoaDon, ChiTietHoaDon.mon_id == Mon.id)
+        .join(HoaDon, HoaDon.id == ChiTietHoaDon.hoaDon_id)
+        .filter(HoaDon.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN)
+        .filter(HoaDon.ngayThanhToan >= start_dt, HoaDon.ngayThanhToan < end_dt)
+        .group_by(Mon.id, Mon.name)
+        .order_by(func.sum(ChiTietHoaDon.thanhTien).desc())
+        .all()
+    )
+    item_rows = [{"name": r.name, "qty": int(r.qty or 0), "revenue": float(r.revenue or 0)} for r in item_rows_q]
+
+    return mode, time_label, kpi, charts, item_rows
+
+
+#Kho
+
+def get_inventory_report_data(
+    q="",
+    group="",
+    status="",
+    only_low=False,
+    include_zero=True,
+    sort="name",
+    raw_from="",
+    raw_to=""
+):
+    query = NguyenLieu.query
+
+    # ===== SEARCH =====
+    if q:
+        query = query.filter(NguyenLieu.name.ilike(f"%{q}%"))
+
+    # ===== FILTER: GROUP (Enum name) =====
+    if group:
+        try:
+            query = query.filter(NguyenLieu.nhom == NhomNguyenLieuEnum[group])
+        except Exception:
+            pass
+
+    # ===== FILTER: INCLUDE ZERO =====
+    if not include_zero:
+        query = query.filter(NguyenLieu.soLuongTon > 0)
+
+    rows = query.all()
+
+    total_items = len(rows)
+    low_count = 0
+    out_count = 0
+    total_qty = 0
+
+    result_rows = []
+
+    for nl in rows:
+        qty = float(nl.soLuongTon or 0)
+        min_qty = float(getattr(nl, "soLuongToiThieu", 0) or 0)
+
+        # ===== STATUS (OK/LOW/OUT) =====
+        if qty <= 0:
+            st = "OUT"
+            out_count += 1
+        elif qty <= min_qty:
+            st = "LOW"
+            low_count += 1
+        else:
+            st = "OK"
+
+        # ===== FILTER: STATUS dropdown (OK/LOW/OUT) =====
+        if status and status in ("OK", "LOW", "OUT") and st != status:
+            continue
+
+        if only_low and st == "OK":
+            continue
+
+        total_qty += qty
+
+        # ===== GROUP LABEL =====
+        if getattr(nl, "nhom", None):
+            group_key = getattr(nl.nhom, "name", None) or ""
+            group_label = getattr(nl.nhom, "value", None) or "Khác"
+        else:
+            group_key = ""
+            group_label = "Khác"
+
+        result_rows.append({
+            "id": nl.id,
+            "code": nl.id,
+            "name": nl.name,
+
+            # dùng cho chart + (nếu bạn muốn) dropdown nhóm
+            "group": group_key,
+            "group_label": group_label,
+
+            "qty": qty,
+            "unit": nl.donViTinh,
+            "min_qty": min_qty,
+            "suggest_qty": max(0, min_qty - qty),
+
+            "days_cover": None,
+            "updated_at": getattr(nl, "ngayTao", None).strftime("%d/%m/%Y")
+                          if getattr(nl, "ngayTao", None) else None,
+            "location": None,
+            "note": None,
+            "status": st
+        })
+
+    # ===== SORT =====
+    if sort == "qty_desc":
+        result_rows.sort(key=lambda x: x["qty"], reverse=True)
+    elif sort == "qty_asc":
+        result_rows.sort(key=lambda x: x["qty"])
+    elif sort == "low_first":
+        order = {"OUT": 0, "LOW": 1, "OK": 2}
+        result_rows.sort(key=lambda x: order.get(x["status"], 3))
+    else:
+        result_rows.sort(key=lambda x: (x["name"] or "").lower())
+
+    # ===== CHART DATA =====
+    by_group = {}
+    for r in result_rows:
+        g = r.get("group_label") or "Khác"
+        by_group[g] = by_group.get(g, 0) + float(r.get("qty") or 0)
+
+    charts = {
+        "by_group": {
+            "labels": list(by_group.keys()),
+            "data": list(by_group.values())
+        },
+        "by_status": {
+            "labels": ["Đủ hàng", "Sắp hết", "Hết hàng"],
+            "data": [
+                len([r for r in result_rows if r["status"] == "OK"]),
+                len([r for r in result_rows if r["status"] == "LOW"]),
+                len([r for r in result_rows if r["status"] == "OUT"])
+            ]
+        }
+    }
+
+    group_opts = []
+    try:
+        for e in NhomNguyenLieuEnum:
+            group_opts.append({"value": e.name, "label": e.value})
+    except Exception:
+        group_opts = []
+
+    return {
+        "kpi": {
+            "total_items": total_items,
+            "low_count": low_count,
+            "out_count": out_count,
+            "stock_value": 0
+        },
+        "rows": result_rows,
+        "total_qty": total_qty,
+        "charts": charts,
+        "group_opts": group_opts,
+        "time_label": None,
+        "export_url": None
+    }
+

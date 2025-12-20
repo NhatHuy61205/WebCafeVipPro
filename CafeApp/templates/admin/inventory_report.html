@@ -1,0 +1,345 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<div class="container-fluid mt-4">
+
+  <style>
+    .kpi-card .small-title{font-size:12px;color:#6c757d;letter-spacing:.2px}
+    .kpi-card h4{margin:0}
+    .filter-card .form-control, .filter-card .custom-select{height:34px}
+    .badge-soft{background:#f1f3f5;color:#495057;border:1px solid #e9ecef}
+    .table thead th{white-space:nowrap}
+    .text-mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    .w-110{width:110px}
+    .w-130{width:130px}
+    .w-160{width:160px}
+    .nowrap{white-space:nowrap}
+    .st-badge{font-size:12px;padding:.25rem .5rem;border-radius:999px;border:1px solid #e9ecef;background:#fff}
+    .st-ok{color:#198754}
+    .st-low{color:#fd7e14}
+    .st-out{color:#dc3545}
+  </style>
+
+  <!-- ===== HEADER ===== -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="text-primary mb-1">Báo cáo tồn kho</h2>
+      <p class="text-muted mb-0">
+        Quản lý kho • <strong>{{ current_user.name }}</strong>
+      </p>
+    </div>
+
+    <div class="text-right">
+      {% if time_label %}
+        <div class="text-muted">Thời gian: {{ time_label }}</div>
+      {% endif %}
+      <div class="mt-1">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ request.path }}">Làm mới</a>
+        {% if export_url %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ export_url }}">Xuất Excel</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== FILTERS ===== -->
+  <div class="card shadow-sm mb-3 filter-card">
+    <div class="card-body">
+      <form method="get">
+        <div class="form-row align-items-end">
+
+          <div class="col-md-4 mb-2">
+            <label class="small text-muted mb-1">Tìm nguyên liệu</label>
+            <input type="text" class="form-control" name="q"
+                   placeholder="Tên nguyên liệu..."
+                   value="{{ request.args.get('q','') }}">
+          </div>
+
+          <div class="col-md-2 mb-2">
+            <label class="small text-muted mb-1">Nhóm nguyên liệu</label>
+            <select class="custom-select" name="group">
+              <option value="">Tất cả</option>
+              {% for g in group_opts or [] %}
+                <option value="{{ g.value }}"
+                  {% if request.args.get('group','') == g.value %}selected{% endif %}>
+                  {{ g.label }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-2 mb-2">
+            <label class="small text-muted mb-1">Trạng thái</label>
+            <select class="custom-select" name="status">
+              <option value="">Tất cả</option>
+              <option value="OK"  {% if request.args.get('status')=='OK' %}selected{% endif %}>Đủ hàng</option>
+              <option value="LOW" {% if request.args.get('status')=='LOW' %}selected{% endif %}>Sắp hết</option>
+              <option value="OUT" {% if request.args.get('status')=='OUT' %}selected{% endif %}>Hết hàng</option>
+            </select>
+          </div>
+
+          <div class="col-md-2 mb-2">
+            <label class="small text-muted mb-1">Từ ngày</label>
+            <input type="date" class="form-control" name="from"
+                   value="{{ request.args.get('from','') }}">
+          </div>
+
+          <div class="col-md-2 mb-2 d-flex">
+            <button class="btn btn-primary mr-2 flex-grow-1">Lọc</button>
+            <a class="btn btn-light flex-grow-1" href="{{ request.path }}">Reset</a>
+          </div>
+        </div>
+
+        <div class="form-row mt-1">
+          <div class="col-md-3 mb-1">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox" class="custom-control-input" id="onlyLow"
+                     name="only_low" value="1"
+                     {% if request.args.get('only_low')=='1' %}checked{% endif %}>
+              <label class="custom-control-label" for="onlyLow">
+                Chỉ hiện sắp hết / hết
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-3 mb-1">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox" class="custom-control-input" id="includeZero"
+                     name="include_zero" value="1"
+                     {% if request.args.get('include_zero','1')=='1' %}checked{% endif %}>
+              <label class="custom-control-label" for="includeZero">
+                Bao gồm tồn = 0
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-3 mb-1">
+            <label class="small text-muted mb-1 d-block">Sắp xếp</label>
+            <select class="custom-select" name="sort">
+              <option value="name" {% if request.args.get('sort','name')=='name' %}selected{% endif %}>Tên A→Z</option>
+              <option value="qty_desc" {% if request.args.get('sort')=='qty_desc' %}selected{% endif %}>Tồn giảm dần</option>
+              <option value="qty_asc" {% if request.args.get('sort')=='qty_asc' %}selected{% endif %}>Tồn tăng dần</option>
+              <option value="low_first" {% if request.args.get('sort')=='low_first' %}selected{% endif %}>Sắp hết lên trước</option>
+            </select>
+          </div>
+
+          <div class="col-md-3 mb-1 text-right">
+            {% if request.args %}
+              <a class="btn btn-sm btn-light mt-4" href="{{ request.path }}">Bỏ lọc</a>
+            {% endif %}
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== KPI ===== -->
+  <div class="row mb-3">
+    <div class="col-md-3 mb-2">
+      <div class="card shadow-sm kpi-card">
+        <div class="card-body">
+          <div class="small-title">TỔNG NGUYÊN LIỆU</div>
+          <h4>{{ kpi.total_items or 0 }}</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-2">
+      <div class="card shadow-sm kpi-card">
+        <div class="card-body">
+          <div class="small-title">SẮP HẾT</div>
+          <h4 class="text-warning">{{ kpi.low_count or 0 }}</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-2">
+      <div class="card shadow-sm kpi-card">
+        <div class="card-body">
+          <div class="small-title">HẾT HÀNG</div>
+          <h4 class="text-danger">{{ kpi.out_count or 0 }}</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3 mb-2">
+      <div class="card shadow-sm kpi-card">
+        <div class="card-body">
+          <div class="small-title">GIÁ TRỊ TỒN ƯỚC TÍNH</div>
+          <h4>{{ "{:,.0f}".format((kpi.stock_value or 0)|float) }} đ</h4>
+          <small class="text-muted">(nếu có đơn giá nhập)</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CHARTS ===== -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white font-weight-bold">
+          <i class="fa fa-pie-chart mr-1"></i> Tồn kho theo nhóm nguyên liệu
+        </div>
+        <div class="card-body">
+          <canvas id="stockByGroupChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white font-weight-bold">
+          <i class="fa fa-bar-chart mr-1"></i> Tình trạng tồn kho
+        </div>
+        <div class="card-body">
+          <canvas id="stockStatusChart" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TABLE ===== -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white font-weight-bold d-flex justify-content-between align-items-center">
+      <div>
+        <i class="fa fa-cubes mr-1"></i> Danh sách tồn kho
+        {% if request.args.get('q') %}
+          <span class="badge badge-soft ml-2">Từ khóa: {{ request.args.get('q') }}</span>
+        {% endif %}
+      </div>
+      <div class="text-muted small">
+        {{ rows|length if rows is defined else 0 }} dòng
+      </div>
+    </div>
+
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th class="w-110">Mã</th>
+              <th>Tên nguyên liệu</th>
+              <th class="w-130">Nhóm</th>
+              <th class="w-110 text-right">Tồn</th>
+              <th class="w-110">ĐVT</th>
+              <th class="w-110 text-right">Tối thiểu</th>
+              <th class="w-130 text-right">Đề xuất nhập</th>
+              <th class="w-160">Cập nhật</th>
+              <th class="w-130">Trạng thái</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% if rows and rows|length > 0 %}
+              {% for r in rows %}
+              {% set st = r.status or 'OK' %}
+              <tr>
+                <td class="text-mono">{{ r.code or r.id }}</td>
+
+                <td>
+                  <div class="font-weight-bold">{{ r.name }}</div>
+                </td>
+
+                <td>
+                  <span class="badge badge-soft">{{ r.group_label or "Khác" }}</span>
+                </td>
+
+                <td class="text-right">
+                  {% if st == 'OUT' %}
+                    <span class="text-danger font-weight-bold">{{ r.qty or 0 }}</span>
+                  {% elif st == 'LOW' %}
+                    <span class="text-warning font-weight-bold">{{ r.qty or 0 }}</span>
+                  {% else %}
+                    <span class="font-weight-bold">{{ r.qty or 0 }}</span>
+                  {% endif %}
+                </td>
+
+                <td class="nowrap">{{ r.unit or '' }}</td>
+                <td class="text-right">{{ r.min_qty or 0 }}</td>
+
+                <td class="text-right">
+                  {% if r.suggest_qty is not none %}
+                    <span class="font-weight-bold">{{ r.suggest_qty }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td class="nowrap">
+                  {% if r.updated_at %}
+                    {{ r.updated_at }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td class="nowrap">
+                  {% if st == 'OUT' %}
+                    <span class="st-badge st-out">Hết hàng</span>
+                  {% elif st == 'LOW' %}
+                    <span class="st-badge st-low">Sắp hết</span>
+                  {% else %}
+                    <span class="st-badge st-ok">Đủ hàng</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="9" class="text-center text-muted py-4">
+                  Không có dữ liệu tồn kho phù hợp bộ lọc.
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+
+          {% if rows and rows|length > 0 %}
+          <tfoot>
+            <tr>
+              <th colspan="3" class="text-right">Tổng</th>
+              <th class="text-right">{{ total_qty or 0 }}</th>
+              <th colspan="5"></th>
+            </tr>
+          </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+  </div>
+
+
+
+</div>
+
+<!-- ===== CHART JS ===== -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  new Chart(document.getElementById('stockByGroupChart'), {
+    type: 'doughnut',
+    data: {
+      labels: {{ charts.by_group.labels | tojson }},
+      datasets: [{
+        data: {{ charts.by_group.data | tojson }}
+      }]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+
+  new Chart(document.getElementById('stockStatusChart'), {
+    type: 'bar',
+    data: {
+      labels: {{ charts.by_status.labels | tojson }},
+      datasets: [{
+        label: 'Số nguyên liệu',
+        data: {{ charts.by_status.data | tojson }}
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+</script>
+{% endblock %}

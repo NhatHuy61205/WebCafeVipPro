@@ -10,6 +10,9 @@ import qrcode
 from flask_login import LoginManager, login_user, current_user, login_required, logout_user
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import  or_
+from CafeApp.dao import get_drink_form_defaults, upsert_drink_to_cart, make_drink_option_key
+
+from CafeApp import admin_app, VIETQR_TEMPLATE_ID
 from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang, LoaiQREnum, TrangThaiQREnum, \
     ThongBao, ChiTietHoaDonTopping, NhomMonEnum
 from CafeApp.models import LoaiDungEnum, TrangThaiHoaDonEnum, SizeEnum
@@ -215,39 +218,21 @@ def drink_config(mon_id):
 
     # ====== GET ======
     if request.method == "GET":
-        cart = session.get("cart", {})
+        cart = get_cart() or {}
         edit_key = (request.args.get("edit_key") or "").strip()
 
-        form = {
-            "size": "S",
-            "duong": "70",
-            "da": "70",
-            "topping": [],
-            "note": "",
-            "quantity": "1"
-        }
-
-        if edit_key and edit_key in cart:
-            old = cart.get(edit_key, {})
-            opts = old.get("options", {}) or {}
-            form = {
-                "size": (opts.get("size") or "S"),
-                "duong": str(opts.get("duong") or "70"),
-                "da": str(opts.get("da") or "70"),
-                "topping": opts.get("topping") or [],
-                "note": opts.get("note") or "",
-                "quantity": str(old.get("quantity") or 1)
-            }
-
+        form = get_drink_form_defaults(cart, edit_key)
         form["topping"] = normalize_topping_codes(form.get("topping", []), TOPPING_OPTS)
 
         unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
         try:
-            qty = int(form["quantity"])
+            qty = int(form.get("quantity") or 1)
         except:
             qty = 1
         total_price = unit_price * max(qty, 1)
+
         next_url = (request.args.get("next") or url_for("menu"))
+
         return render_template(
             "drink_modal.html",
             mon=mon,
@@ -273,6 +258,8 @@ def drink_config(mon_id):
     qty_raw = (request.form.get("quantity") or "1").strip()
     edit_key = (request.form.get("edit_key") or "").strip()
     next_url = (request.form.get("next") or url_for("menu"))
+    action = (request.form.get("action") or "").strip()
+
     topping = normalize_topping_codes(topping, TOPPING_OPTS)
 
     errors = {}
@@ -287,7 +274,7 @@ def drink_config(mon_id):
     unit_price, desc_list = build_drink(mon, size, duong, da, topping)
     total_price = unit_price * qty
 
-    action = (request.form.get("action") or "").strip()
+    # Nếu chưa bấm add hoặc có lỗi -> render lại modal
     if action != "add" or errors:
         form = {
             "size": size,
@@ -313,46 +300,39 @@ def drink_config(mon_id):
             next_url=next_url
         )
 
-    option_key = f"{mon.id}|{size}|{duong}|{da}|{','.join(sorted(topping))}|{note}"
-    cart = session.get("cart", {}) or {}
+    # ====== Add/Update cart (dùng service trong dao.py) ======
+    cart = get_cart() or {}
+
+    # Tạo key chuẩn để check limit (quan trọng với edit_key)
+    option_key = make_drink_option_key(mon.id, size, duong, da, topping, note)
 
     resp = check_cart_limit_or_redirect(
-        cart=cart,  # dùng cart thật
+        cart=cart,
         option_key=option_key,
         redirect_endpoint="menu",
-        redirect_kwargs={},  # nếu cần giữ page: {"page": page}
+        redirect_kwargs={},
         message="Giỏ hàng chỉ tối đa 10 món khác nhau.",
-        edit_key=edit_key  # QUAN TRỌNG
+        edit_key=edit_key
     )
     if resp:
         flash("Giỏ hàng chỉ tối đa 10 món khác nhau.", "warning")
         return redirect(next_url)
 
-    # nếu qua được check thì mới pop edit_key và add/update
-    if edit_key and edit_key in cart:
-        cart.pop(edit_key, None)
+    cart, _, _, _, _ = upsert_drink_to_cart(
+        cart=cart,
+        mon=mon,
+        size=size,
+        duong=duong,
+        da=da,
+        toppings=topping,
+        note=note,
+        qty_raw=qty_raw,
+        edit_key=edit_key
+    )
 
-    if option_key not in cart:
-        cart[option_key] = {
-            "id": mon.id,
-            "name": mon.name,
-            "price": unit_price,
-            "quantity": 0,
-            "options": {
-                "size": size,
-                "duong": duong,
-                "da": da,
-                "topping": topping,
-                "note": note,
-                "desc": desc_list
-            }
-        }
-
-    cart[option_key]["quantity"] += qty
-
-    session["cart"] = cart
-    session.modified = True
+    save_cart(cart)
     return redirect(next_url or url_for("menu"))
+
 
 
 @app.route("/drink/edit/<path:cart_key>", methods=["GET"])
@@ -536,7 +516,7 @@ def cart_add():
             "price": float(mon.gia),
             "image": mon.image or "",
             "quantity": 0,
-            "options": {}
+            "options": None
         }
 
     cart[key]["quantity"] += qty
@@ -828,13 +808,26 @@ def sepay_webhook():
 
     hoa_don.trangThai = TrangThaiHoaDonEnum.DA_THANH_TOAN
     hoa_don.ngayThanhToan = datetime.datetime.now()
+    exists = (ThongBao.query
+              .filter(ThongBao.hoaDon_id == hoa_don.id)
+              .filter(ThongBao.is_read == False)
+              .filter(ThongBao.message.ilike("%Online%"))
+              .first())
+
+    if not exists:
+        tb = ThongBao(
+            hoaDon_id=hoa_don.id,
+            is_read=False,
+            message=f"Đơn Online #{hoa_don.maThamChieu or ('HD' + str(hoa_don.id))} đã thanh toán"
+        )
+        db.session.add(tb)
+
     db.session.commit()
 
     print(f"[SePay] CONFIRMED {ma_hd} amount={amount}")
     return jsonify({"ok": True, "message": "Payment confirmed", "ma_hd": ma_hd}), 200
 
 
-VIETQR_TEMPLATE_ID = "akGFPiZ"
 
 
 def vietqr_quicklink(amount: int, add_info: str) -> str:
@@ -887,11 +880,9 @@ def register():
 
 @app.route("/admin")
 def admin_dashboard():
-    # Kiểm tra quyền Admin
     if session.get('role') not in ['QUAN_LY_CUA_HANG', 'QUAN_LY_KHO']:
         return redirect(url_for('login'))
-
-    return render_template("admin/dashboard.html")
+    return redirect("/admin/")  # Flask-Admin default index
 
 
 @login.user_loader
@@ -959,7 +950,7 @@ def pos_page():
                     "name": mon.name,
                     "price": float(mon.gia),
                     "quantity": 0,
-                    "options": {"desc": [], "note": ""}
+                    "options": None
                 }
 
             pos_cart[option_key]["quantity"] += 1
@@ -1040,16 +1031,16 @@ def save_pos_cart(cart: dict):
 def pos_drink_config(mon_id):
     mon = Mon.query.get_or_404(mon_id)
 
+    # Nếu không phải NUOC -> add nhanh 1 cái (giữ đúng logic hiện tại)
     if mon.loaiMon != LoaiMonEnum.NUOC:
-
         cart = get_pos_cart()
-        option_key = f"{mon.id}|S|70|70||"
+        option_key = f"{mon.id}|NOOPT"
 
         resp = check_cart_limit_or_redirect(
             cart=cart,
             option_key=option_key,
             redirect_endpoint="pos_page",
-            redirect_kwargs={},  # nếu bạn muốn giữ page thì truyền {"page": request.args.get("page", 1, type=int)}
+            redirect_kwargs={},
             message="Quá số lượng món trên hóa đơn (tối đa 10 món khác nhau).",
             edit_key=None
         )
@@ -1062,15 +1053,9 @@ def pos_drink_config(mon_id):
                 "name": mon.name,
                 "price": float(mon.gia),
                 "quantity": 0,
-                "options": {
-                    "size": "S",
-                    "duong": "70",
-                    "da": "70",
-                    "topping": [],
-                    "note": "",
-                    "desc": []
-                }
+                "options": None
             }
+
         cart[option_key]["quantity"] += 1
         save_pos_cart(cart)
         return redirect(url_for("pos_page"))
@@ -1083,30 +1068,16 @@ def pos_drink_config(mon_id):
         cart = get_pos_cart()
         edit_key = (request.args.get("edit_key") or "").strip()
 
-        form = {"size": "S", "duong": "70", "da": "70", "topping": [], "note": "", "quantity": "1"}
-
-        if edit_key and edit_key in cart:
-            old = cart.get(edit_key, {})
-            opts = old.get("options", {}) or {}
-            form = {
-                "size": (opts.get("size") or "S"),
-                "duong": str(opts.get("duong") or "70"),
-                "da": str(opts.get("da") or "70"),
-                "topping": opts.get("topping") or [],
-                "note": opts.get("note") or "",
-                "quantity": str(old.get("quantity") or 1)
-            }
-
+        form = get_drink_form_defaults(cart, edit_key)
         form["topping"] = normalize_topping_codes(form.get("topping", []), TOPPING_OPTS)
 
         unit_price, desc_list = build_drink(mon, form["size"], form["duong"], form["da"], form["topping"])
         try:
-            qty = int(form["quantity"])
+            qty = int(form.get("quantity") or 1)
         except:
             qty = 1
         total_price = unit_price * max(qty, 1)
 
-        # dùng wrapper drink_modal.html nhưng close_url quay về /pos
         return render_template(
             "drink_modal.html",
             mon=mon,
@@ -1121,10 +1092,10 @@ def pos_drink_config(mon_id):
             TOPPING_OPTS=TOPPING_OPTS,
             edit_key=edit_key or None,
 
-            # override cho wrapper
+            # override cho POS
             close_url=url_for("pos_page"),
             form_action=url_for("pos_drink_config", mon_id=mon.id),
-            ui_mode="MENU"  # vẫn dùng mode MENU (submit form) để khỏi JS
+            ui_mode="MENU"
         )
 
     # ====== POST ======
@@ -1135,6 +1106,7 @@ def pos_drink_config(mon_id):
     note = (request.form.get("note") or "").strip()
     qty_raw = (request.form.get("quantity") or "1").strip()
     edit_key = (request.form.get("edit_key") or "").strip()
+    action = (request.form.get("action") or "").strip()
 
     topping = normalize_topping_codes(topping, TOPPING_OPTS)
 
@@ -1150,10 +1122,15 @@ def pos_drink_config(mon_id):
     unit_price, desc_list = build_drink(mon, size, duong, da, topping)
     total_price = unit_price * qty
 
-    action = (request.form.get("action") or "").strip()
-
     if action != "add" or errors:
-        form = {"size": size, "duong": duong, "da": da, "topping": topping, "note": note, "quantity": qty_raw}
+        form = {
+            "size": size,
+            "duong": duong,
+            "da": da,
+            "topping": topping,
+            "note": note,
+            "quantity": qty_raw
+        }
         return render_template(
             "drink_modal.html",
             mon=mon,
@@ -1167,13 +1144,16 @@ def pos_drink_config(mon_id):
             ICE_OPTS=ICE_OPTS,
             TOPPING_OPTS=TOPPING_OPTS,
             edit_key=edit_key or None,
+
             close_url=url_for("pos_page"),
             form_action=url_for("pos_drink_config", mon_id=mon.id),
             ui_mode="MENU"
         )
 
-    option_key = f"{mon.id}|{size}|{duong}|{da}|{','.join(sorted(topping))}|{note}"
-    cart = get_pos_cart() or {}
+    # ====== Add/Update POS cart (dùng service trong dao.py) ======
+    cart = get_pos_cart()
+
+    option_key = make_drink_option_key(mon.id, size, duong, da, topping, note)
 
     resp = check_cart_limit_or_redirect(
         cart=cart,
@@ -1186,28 +1166,21 @@ def pos_drink_config(mon_id):
     if resp:
         return resp
 
-    if edit_key and edit_key in cart:
-        cart.pop(edit_key, None)
+    cart, _, _, _, _ = upsert_drink_to_cart(
+        cart=cart,
+        mon=mon,
+        size=size,
+        duong=duong,
+        da=da,
+        toppings=topping,
+        note=note,
+        qty_raw=qty_raw,
+        edit_key=edit_key
+    )
 
-    if option_key not in cart:
-        cart[option_key] = {
-            "id": mon.id,
-            "name": mon.name,
-            "price": unit_price,
-            "quantity": 0,
-            "options": {
-                "size": size,
-                "duong": duong,
-                "da": da,
-                "topping": topping,
-                "note": note,
-                "desc": desc_list
-            }
-        }
-
-    cart[option_key]["quantity"] += qty
     save_pos_cart(cart)
     return redirect(url_for("pos_page"))
+
 
 
 @app.route("/pos/cart/inc/<path:key>", methods=["POST"])

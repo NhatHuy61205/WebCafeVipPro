@@ -2,75 +2,283 @@
 
 {% block body %}
 <div class="container-fluid mt-4">
-    
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <h2 class="text-primary">Bảng Điều Khiển (Dashboard)</h2>
-            <p class="text-muted">Chào mừng quay trở lại, <strong>{{ current_user.name }}</strong>!</p>
+
+    <!-- ===== HEADER ===== -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="text-primary mb-1">Báo Cáo Doanh Thu</h2>
+            <p class="text-muted mb-0">
+                Chào mừng quay trở lại, <strong>{{ current_user.name }}</strong>
+            </p>
         </div>
+
+        <!-- ===== TIME FILTER ===== -->
+        <!-- ===== TIME FILTER ===== -->
+<div class="time-filter">
+  <div class="btn-group">
+    <a href="?mode=TODAY"
+       class="btn btn-outline-secondary {% if mode=='TODAY' %}active{% endif %}">Hôm nay</a>
+
+    <a href="?mode=WEEK"
+       class="btn btn-outline-secondary {% if mode=='WEEK' %}active{% endif %}">Tuần này</a>
+
+    <a href="?mode=MONTH"
+       class="btn btn-outline-secondary {% if mode=='MONTH' %}active{% endif %}">Tháng này</a>
+
+    <a href="?mode=CUSTOM"
+       class="btn btn-outline-secondary {% if mode=='CUSTOM' %}active{% endif %}"
+       data-toggle="collapse"
+       data-target="#customRangeBox"
+       aria-expanded="{% if mode=='CUSTOM' %}true{% else %}false{% endif %}">
+      Tùy chọn
+    </a>
+  </div>
+
+  <!-- NẰM DƯỚI NÚT (đúng yêu cầu) -->
+  <div class="collapse {% if mode=='CUSTOM' %}show{% endif %}" id="customRangeBox">
+    <form method="get" class="custom-range-form">
+      <input type="hidden" name="mode" value="CUSTOM">
+
+      <span class="cr-label">Từ</span>
+      <input type="date" class="cr-input" name="from"
+             value="{{ request.args.get('from','') }}">
+
+      <span class="cr-label">Đến</span>
+      <input type="date" class="cr-input" name="to"
+             value="{{ request.args.get('to','') }}">
+
+      <button class="btn btn-sm btn-primary cr-btn">Xem</button>
+      <a class="btn btn-sm btn-light cr-btn" href="?mode=WEEK">Reset</a>
+    </form>
+  </div>
+</div>
     </div>
 
+    {% if time_label %}
+    <div class="text-right text-muted mb-3">
+        Thời gian: {{ time_label }}
+    </div>
+    {% endif %}
+
+    <!-- ===== KPI CARDS ===== -->
     <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card text-white bg-success mb-3 shadow">
-                <div class="card-header">Tổng Doanh Thu Tuần</div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm">
                 <div class="card-body">
-                    <h3 class="card-title">{{ "{:,.0f}".format(revenue) }} VNĐ</h3>
+                    <div class="text-muted small">DOANH THU</div>
+                    <h4 class="mb-1">{{ "{:,.0f}".format(kpi.revenue) }} đ</h4>
+                    {% if kpi.revenue_pct is not none %}
+                    <span class="{% if kpi.revenue_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ "+" if kpi.revenue_pct >= 0 else "" }}{{ "%.1f"|format(kpi.revenue_pct) }}%
+          </span>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card text-white bg-info mb-3 shadow">
-                <div class="card-header">Đơn Hàng Mới</div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm">
                 <div class="card-body">
-                    <h3 class="card-title">125 Đơn</h3>
+                    <div class="text-muted small">SỐ ĐƠN HÀNG</div>
+                    <h4 class="mb-1">{{ kpi.orders }}</h4>
+                    {% if kpi.orders_pct is not none %}
+                    <span class="{% if kpi.orders_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ "+" if kpi.orders_pct >= 0 else "" }}{{ "%.1f"|format(kpi.orders_pct) }}%
+          </span>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card text-white bg-warning mb-3 shadow">
-                <div class="card-header">Cảnh Báo Kho</div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm">
                 <div class="card-body">
-                    <h3 class="card-title">Kiểm tra ngay!</h3>
+                    <div class="text-muted small">SỐ MÓN BÁN RA</div>
+                    <h4 class="mb-0">{{ kpi.items_sold }}</h4>
                 </div>
             </div>
         </div>
+
+        <div class="col-md-3">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="text-muted small">GIÁ TRỊ ĐƠN TB</div>
+                    <h4 class="mb-0">{{ "{:,.0f}".format(kpi.avg_order_value) }} đ</h4>
+                </div>
+            </div>
+        </div>
+
     </div>
 
+    <!-- ===== CHARTS ===== -->
+    <div class="row">
+
+        <!-- Revenue by day -->
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white font-weight-bold">
+                    <i class="fa fa-bar-chart mr-1"></i> Doanh thu theo ngày
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" height="140"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top categories -->
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white font-weight-bold">
+                    <i class="fa fa-pie-chart mr-1"></i> Top danh mục bán chạy
+                </div>
+                <div class="card-body">
+                    <canvas id="categoryChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <!-- ===== TABLE: CHI TIẾT BÁN HÀNG THEO MÓN ===== -->
     <div class="row">
         <div class="col-md-12">
-            <div class="card shadow">
-                <div class="card-header bg-white font-weight-bold">
-                    <i class="fa fa-bar-chart"></i> Biểu đồ doanh thu 7 ngày qua
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white font-weight-bold d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fa fa-list mr-1"></i> Chi tiết bán hàng theo Món
+                    </div>
+                    <div class="text-muted small">
+                        {% if time_label %}{{ time_label }}{% endif %}
+                    </div>
                 </div>
-                <div class="card-body">
-                    <canvas id="revenueChart" width="400" height="150"></canvas>
+
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="thead-light">
+                            <tr>
+                                <th style="width:70px">STT</th>
+                                <th>Tên món</th>
+                                <th class="text-right" style="width:160px">Số lượng</th>
+                                <th class="text-right" style="width:220px">Doanh thu</th>
+                            </tr>
+                            </thead>
+
+                            <tbody>
+                            {% if item_rows and item_rows|length > 0 %}
+                            {% for r in item_rows %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ r.name }}</td>
+                                <td class="text-right">{{ r.qty }}</td>
+                                <td class="text-right">{{ "{:,.0f}".format(r.revenue) }} đ</td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">
+                                    Chưa có dữ liệu bán hàng trong khoảng thời gian này.
+                                </td>
+                            </tr>
+                            {% endif %}
+                            </tbody>
+
+                            {% if item_rows and item_rows|length > 0 %}
+                            <tfoot>
+                            <tr>
+                                <th colspan="2" class="text-right">Tổng</th>
+                                <th class="text-right">
+                                    {{ item_rows | sum(attribute='qty') }}
+                                </th>
+                                <th class="text-right">
+                                    {{ "{:,.0f}".format(item_rows | sum(attribute='revenue')) }} đ
+                                </th>
+                            </tr>
+                            </tfoot>
+                            {% endif %}
+                        </table>
+                    </div>
                 </div>
+
             </div>
         </div>
     </div>
-</div>
 
+</div>
+<style>
+  .time-filter{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end; /* căn phải */
+    gap:10px;
+  }
+
+  .custom-range-form{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:nowrap;
+  }
+
+  .cr-label{
+    color:#6c757d;
+    font-size:13px;
+    white-space:nowrap;
+  }
+
+  .cr-input{
+    height:32px;
+    padding:4px 10px;
+    border:1px solid #ced4da;
+    border-radius:6px;
+    min-width:170px;
+  }
+
+  .cr-btn{
+    height:32px;
+    padding:4px 12px;
+    border-radius:6px;
+    white-space:nowrap;
+  }
+</style>
+
+<!-- ===== CHART JS ===== -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    var ctx = document.getElementById('revenueChart').getContext('2d');
-    var myChart = new Chart(ctx, {
-        type: 'bar', // Kiểu biểu đồ: 'bar' (cột), 'line' (đường)
-        data: {
-            labels: {{ labels | tojson }}, // Nhận từ Python
-            datasets: [{
-                label: 'Doanh thu (VNĐ)',
-                data: {{ data | tojson }}, // Nhận từ Python
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            scales: {
-                y: { beginAtZero: true }
-            }
+    // ===== BAR CHART =====
+    new Chart(document.getElementById('revenueChart'), {
+      type: 'bar',
+      data: {
+        labels: {{ charts.revenue_by_day.labels | tojson }},
+        datasets: [{
+          label: 'Doanh thu (đ)',
+          data: {{ charts.revenue_by_day.data | tojson }},
+          backgroundColor: '#c49a6c'
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true }
         }
+      }
+    });
+
+    // ===== PIE CHART =====
+    new Chart(document.getElementById('categoryChart'), {
+      type: 'pie',
+      data: {
+        labels: {{ charts.top_categories.labels | tojson }},
+        datasets: [{
+          data: {{ charts.top_categories.data | tojson }},
+          backgroundColor: ['#5c3b1e', '#8b5a2b', '#b07d4f', '#d3b58f']
+        }]
+      },
+      options: {
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
     });
 </script>
 {% endblock %}
