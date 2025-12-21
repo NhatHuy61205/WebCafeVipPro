@@ -1,0 +1,67 @@
+{% extends 'admin/model/list.html' %}
+
+{% block head_css %}
+  {{ super() }}
+  <style>
+    /* làm tab đẹp hơn + giống style bạn muốn */
+    ul.nav.nav-tabs{
+      margin-top: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    ul.nav.nav-tabs > li > a{
+      color:#0d9488;
+      font-weight:700;
+      padding:10px 14px;
+      border: none !important;
+      border-bottom: 3px solid transparent !important;
+    }
+    ul.nav.nav-tabs > li.active > a{
+      border-bottom-color:#0d9488 !important;
+      background: transparent !important;
+    }
+
+    /* cột icon */
+    th.col-edit_col, td.col-edit_col,
+    th.col-delete_col, td.col-delete_col{
+      width:56px;
+      text-align:center;
+    }
+
+    /* Toggle iOS */
+    .ios-switch{ position:relative; display:inline-block; width:46px; height:26px; }
+    .ios-switch input{ display:none; }
+    .ios-slider{ position:absolute; inset:0; background:#d1d5db; border-radius:999px; transition:.25s; }
+    .ios-slider:before{ content:""; position:absolute; height:20px; width:20px; left:3px; top:3px; background:#fff; border-radius:999px; transition:.25s; }
+    .ios-switch input:checked + .ios-slider{ background:#3b82f6; }
+    .ios-switch input:checked + .ios-slider:before{ transform:translateX(20px); }
+  </style>
+{% endblock %}
+
+{% block tail %}
+  {{ super() }}
+  <script>
+    // đổi chữ tab mặc định của Flask-Admin
+    (function(){
+      function fixTabs(){
+        const links = document.querySelectorAll("ul.nav.nav-tabs a");
+        links.forEach(a=>{
+          const t = (a.textContent || "").trim().toLowerCase();
+          if(t.startsWith("list")) a.textContent = "Danh sách";
+          if(t.startsWith("create")) a.textContent = "Tạo Bot";
+        });
+      }
+      fixTabs();
+      setTimeout(fixTabs, 200); // phòng khi theme render chậm
+    })();
+
+    async function toggleBot(url, el){
+      try{
+        const r = await fetch(url, {method:"POST"});
+        const j = await r.json();
+        if(!j.ok) el.checked = !el.checked;
+      }catch(e){
+        el.checked = !el.checked;
+      }
+    }
+  </script>
+{% endblock %}

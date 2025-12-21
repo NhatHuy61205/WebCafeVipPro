@@ -21,6 +21,11 @@
                         {% endfor %}
                     {% endif %}
                 {% endwith %}
+                {% if err_msg %}
+  <div class="alert alert-danger mb-4 rounded-3 text-center small fw-bold">
+      {{ err_msg }}
+  </div>
+{% endif %}
                <form action="{{ url_for('login') }}" method="POST">
                     <div class="mb-3">
                         <label class="form-label fw-bold text-secondary">Tên đăng nhập</label>

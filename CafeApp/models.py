@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer,Time, String, DateTime, Enum as SqlEnum,Date, Float, ForeignKey
+from sqlalchemy import Column, Integer, Time, String, DateTime, Enum as SqlEnum, Date, Float, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from flask_login import UserMixin
 from CafeApp import db, app
@@ -32,7 +32,7 @@ class NhanVienCuaHang(Base, UserMixin):
 
     sdt = Column(String(20), nullable=False, unique=True)
     tenDangNhap = Column(String(100), nullable=True, unique=True)
-    matKhau = Column(String(150), nullable=True)
+    matKhau = Column(String(300), nullable=True)
     role = Column( SqlEnum(RoleEnum), nullable=False, default=RoleEnum.NHAN_VIEN)
     trangThai = Column( SqlEnum(TrangThaiEnum),default=TrangThaiEnum.ACTIVE)
 
@@ -71,7 +71,7 @@ class HoaDon(Base):
     loaiHoaDon = Column(SqlEnum(LoaiDungEnum),nullable=False)
     trangThai = Column(SqlEnum(TrangThaiHoaDonEnum),default=TrangThaiHoaDonEnum.CHO_THANH_TOAN)
     khachHang_id = Column(Integer, ForeignKey(KhachHang.__table__.c.id), nullable=True)
-    maThamChieu = Column(String(50), unique=True, nullable=True)  # ví dụ: "HD123"
+    maThamChieu = Column(String(50), unique=True, nullable=True)
     ngayTao = Column(DateTime, default=datetime.datetime.now())
     khachHang = relationship("KhachHang", back_populates="hoaDons")
 
@@ -93,18 +93,15 @@ class NhomMonEnum(Enum):
 
 class Mon(Base):
     chiTietHoaDon = relationship("ChiTietHoaDon", back_populates="mon", lazy=True)
-    congThuc = relationship("CongThuc", backref="mon", lazy=True)
+    congThuc = relationship("CongThuc", backref="mon", lazy=True, cascade="all, delete-orphan")
+    topping_links = db.relationship("MonTopping", back_populates="mon")
+
     gia = Column(Float, nullable=False)
     moTa = Column(String(255), nullable=True)
     trangThai = Column(SqlEnum(TrangThaiMonEnum), default=TrangThaiMonEnum.DANG_BAN)
-    image = Column(String(255))
+    image = Column(String(255), nullable = True)
     loaiMon = Column(SqlEnum(LoaiMonEnum), nullable=False, default=LoaiMonEnum.NUOC)
     nhom = db.Column( SqlEnum(NhomMonEnum, native_enum=False),nullable=True)
-    topping_links = db.relationship(
-        "MonTopping",
-        back_populates="mon",
-        cascade="all, delete-orphan"
-    )
 
     @property
     def allowed_toppings(self):
@@ -149,24 +146,28 @@ class Topping(Base):
     code = db.Column(db.String(50), unique=True, nullable=False)   # TRAN_CHAU            # Trân châu
     price = db.Column(db.Integer, nullable=False, default=0)      # giá mặc định
     is_active = db.Column(db.Boolean, default=True)
-    mon_links = db.relationship(
-        "MonTopping",
-        back_populates="topping",
-        cascade="all, delete-orphan"
-    )
+    mon_toppings = db.relationship("MonTopping", back_populates="topping", cascade="all, delete-orphan")
+    @staticmethod
+    def get_active_toppings_list():
+        return Topping.query.filter(Topping.is_active == True).all()
+
 
 class MonTopping(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
 
-    mon_id = db.Column(db.Integer, db.ForeignKey(Mon.__table__.c.id), primary_key=True)
-    topping_id = db.Column(db.Integer, db.ForeignKey(Topping.__table__.c.id), primary_key=True)
+    mon_id = db.Column(db.Integer, db.ForeignKey(Mon.__table__.c.id), nullable=False)
+    topping_id = db.Column(db.Integer, db.ForeignKey(Topping.__table__.c.id), nullable=False)
 
-    # mở rộng
-    override_price = db.Column(db.Integer, nullable=True)   # nếu null → dùng Topping.price
+
+    override_price = db.Column(db.Integer, nullable=True)
     is_allowed = db.Column(db.Boolean, default=True)
 
-    # relationships
     mon = db.relationship("Mon", back_populates="topping_links")
-    topping = db.relationship("Topping", back_populates="mon_links")
+    topping = db.relationship("Topping", back_populates="mon_toppings")
+
+    __table_args__ = (
+        db.UniqueConstraint('mon_id', 'topping_id', name='unique_mon_topping'),
+    )
 
 
 class ChiTietHoaDonTopping(db.Model):
@@ -205,7 +206,7 @@ class TrangThaiNguyenLieuEnum(Enum):
     CON_HANG = "CON_HANG"
     SAP_HET = "SAP_HET"
     HET_HANG = "HET_HANG"
-
+    NGUNG_SU_DUNG = "NGUNG_SU_DUNG"
 class NhomNguyenLieuEnum(Enum):
     CA_PHE = "Cà phê"
     TRA = "Trà"
@@ -217,14 +218,20 @@ class NhomNguyenLieuEnum(Enum):
 
 
 class NguyenLieu(Base):
-    congThuc = relationship("CongThuc", backref="nguyenLieu", lazy=True)
+    congThuc = relationship("CongThuc", backref="nguyenLieu", lazy=True, cascade="all, delete-orphan")
     chiTietNhap = relationship("ChiTietPhieuNhap", backref="nguyenLieu", lazy=True)
     donViTinh = Column(String(50), nullable=False)
     soLuongTon = Column(Float, default=0.0)
     giaMuaToiThieu = Column(Float, default=0.0)
     trangThai = Column(SqlEnum(TrangThaiNguyenLieuEnum),default=TrangThaiNguyenLieuEnum.CON_HANG)
-    soLuongToiThieu = Column(Float, default=0.0)
+    soLuongToiThieu = Column(Float, default=5.0)
     nhom = Column(SqlEnum(NhomNguyenLieuEnum), default=NhomNguyenLieuEnum.KHAC)
+
+    @staticmethod
+    def get_active_ingredients_list():
+        return NguyenLieu.query.filter(
+            NguyenLieu.trangThai != TrangThaiNguyenLieuEnum.NGUNG_SU_DUNG).all()
+
 
 class PhieuNhap(Base):
     chiTiet = relationship("ChiTietPhieuNhap", backref="phieuNhap", lazy=True)
@@ -233,6 +240,7 @@ class PhieuNhap(Base):
     ghiChu = Column(String(255), nullable=True)
     nguoiNhap_id = Column(Integer, ForeignKey(NhanVienCuaHang.__table__.c.id), nullable=False)
 
+    nguoiNhap = relationship("NhanVienCuaHang", backref="phieuNhaps", foreign_keys=[nguoiNhap_id])
 
 
 class ChiTietPhieuNhap(db.Model):
@@ -279,9 +287,10 @@ class QRCode(db.Model):
 
 class SchedulerBot(db.Model):
     id = Column(Integer, primary_key=True, autoincrement=True, nullable=True)
-    gioChayHangNgay = Column(Time, nullable=False)
-
+    gioChayHangNgay = Column(Time, nullable=False, unique=True)
     trangThai = Column(SqlEnum(TrangThaiEnum),default=TrangThaiEnum.ACTIVE)
+    last_run_date = Column(Date, nullable=True)
+
 
 class BaoCaoTonKho(Base):
 
@@ -302,6 +311,30 @@ class ThongBao(db.Model):
     type = db.Column(db.String(50), default="TABLE_CONFIRMED", nullable=False)
 
     hoaDon = db.relationship("HoaDon", backref=db.backref("thongBao", lazy=True))
+
+class TrangThaiThongBaoKhoEnum(Enum):
+    UNREAD = "UNREAD"
+    READ = "READ"
+
+class LoaiThongBaoKhoEnum(Enum):
+    LOW_STOCK = "LOW_STOCK"
+    OUT_OF_STOCK = "OUT_OF_STOCK"
+    DAILY_REPORT = "DAILY_REPORT"
+
+class ThongBaoKho(db.Model):
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.now, nullable=False, index=True)
+
+    loai = db.Column(db.Enum(LoaiThongBaoKhoEnum), default=LoaiThongBaoKhoEnum.LOW_STOCK, nullable=False)
+    trang_thai = db.Column(db.Enum(TrangThaiThongBaoKhoEnum), default=TrangThaiThongBaoKhoEnum.UNREAD, nullable=False)
+
+    message = db.Column(db.String(255), nullable=False)
+    nguyenLieu_id = db.Column(db.Integer, db.ForeignKey("nguyen_lieu.id"), nullable=True, index=True)
+    nguyenLieu = db.relationship("NguyenLieu")
+    run_date = db.Column(db.Date, nullable=True, index=True)
+
+Index("ix_tbk_nl_date_loai", ThongBaoKho.nguyenLieu_id, ThongBaoKho.run_date, ThongBaoKho.loai)
 
 
 if __name__=="__main__":

@@ -3,6 +3,11 @@ import re
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+import cloudinary
+import os
+from CafeApp.inventory_bot import start_inventory_scheduler
+
+
 
 app = Flask(__name__)
 app.secret_key = "sdaasasadadss"
@@ -25,4 +30,12 @@ BANK_ACCOUNT_NAME = "BUI NHAT HUY"  # tùy chọn (API dùng để hiển thị)
 login = LoginManager(app)
 login.login_view = "login"
 
+
+cloudinary.config(
+    cloud_name = "duybrbxoz",
+    api_key = "862299828767341",
+    api_secret = "qesiGf5atKtSUg0_xGXE8x16cjA"
+ )
 db = SQLAlchemy(app)
+if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+    start_inventory_scheduler(app, db)

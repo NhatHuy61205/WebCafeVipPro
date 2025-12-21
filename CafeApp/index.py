@@ -10,11 +10,12 @@ import qrcode
 from flask_login import LoginManager, login_user, current_user, login_required, logout_user
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import  or_
-from CafeApp.dao import get_drink_form_defaults, upsert_drink_to_cart, make_drink_option_key
+from CafeApp.dao import get_drink_form_defaults, upsert_drink_to_cart, make_drink_option_key, \
+    count_unread_thong_bao_kho, get_latest_thong_bao_kho, mark_thong_bao_kho_as_read, delete_thong_bao_kho
 
 from CafeApp import admin_app, VIETQR_TEMPLATE_ID
 from CafeApp.models import KhachHang, HoaDon, ChiTietHoaDon, Mon, NhanVienCuaHang, LoaiQREnum, TrangThaiQREnum, \
-    ThongBao, ChiTietHoaDonTopping, NhomMonEnum
+    ThongBao, ChiTietHoaDonTopping, NhomMonEnum, TrangThaiEnum, TrangThaiThongBaoKhoEnum, ThongBaoKho
 from CafeApp.models import LoaiDungEnum, TrangThaiHoaDonEnum, SizeEnum
 from CafeApp.models import LoaiMonEnum, QRCode
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, abort, flash, current_app, \
@@ -158,6 +159,13 @@ def login_my_user():
         print("AUTH USER =", bool(user))  # <-- thêm
 
         if user:
+            try:
+                if getattr(user, "trangThai", None) == TrangThaiEnum.INACTIVE:
+                    err_msg = "Tài khoản đã bị khóa (INACTIVE), không thể đăng nhập!"
+                    return render_template("login.html", err_msg=err_msg)
+            except Exception:
+                err_msg = "Tài khoản không hợp lệ!"
+                return render_template("login.html", err_msg=err_msg)
             login_user(user)
             print("LOGIN_USER DONE. current_user.auth =", current_user.is_authenticated)  # <-- thêm
 
@@ -185,6 +193,13 @@ def admin_login_process():
     user = dao.auth_user(username, password)
 
     if user:
+        try:
+            if getattr(user, "trangThai", None) == TrangThaiEnum.INACTIVE:
+                flash("Tài khoản đã bị khóa (INACTIVE), không thể đăng nhập!", "danger")
+                return redirect(url_for("login_my_user"))
+        except Exception:
+            flash("Tài khoản không hợp lệ!", "danger")
+            return redirect(url_for("login_my_user"))
         role_str = user.role.value if hasattr(user.role, "value") else user.role
         if role_str not in ["QUAN_LY_CUA_HANG", "QUAN_LY_KHO"]:
             flash("Bạn không có quyền truy cập Admin!", "danger")
@@ -887,8 +902,17 @@ def admin_dashboard():
 
 @login.user_loader
 def load_user(user_id):
-    return NhanVienCuaHang.query.get(int(user_id))
+    u = NhanVienCuaHang.query.get(int(user_id))
+    if not u:
+        return None
 
+    try:
+        if u.trangThai == TrangThaiEnum.INACTIVE:
+            return None
+    except Exception:
+        return None
+
+    return u
 
 # ====== NHÂN VIÊN - POS
 
@@ -1573,6 +1597,73 @@ def check_in_table():
     return render_template('enter_table.html')
 
 
+
+
+# Noti BOT
+@app.route("/admin/kho/noti/count", methods =['get'])
+def kho_noti_count():
+    if not current_user.is_authenticated:
+        return jsonify({"count": 0})
+
+    role = getattr(current_user.role, "value", None) or str(current_user.role)
+    if role != "QUAN_LY_KHO":
+        return jsonify({"count": 0})
+
+    return jsonify({"count": count_unread_thong_bao_kho()})
+
+
+@app.route("/admin/kho/noti/list", methods = ['get'])
+def kho_noti_list():
+    if not current_user.is_authenticated:
+        return jsonify([])
+
+    role = getattr(current_user.role, "value", None) or str(current_user.role)
+    if role != "QUAN_LY_KHO":
+        return jsonify([])
+
+    items = get_latest_thong_bao_kho(10)
+
+    return jsonify([{
+        "id": x.id,
+        "message": x.message,
+        "created_at": x.created_at.strftime("%d/%m %H:%M"),
+        "unread": x.trang_thai.name == "UNREAD",
+        "nguyenLieu_id": x.nguyenLieu_id
+    } for x in items])
+
+
+@app.route("/admin/kho/noti/open/<int:noti_id>", methods = ['get'])
+def kho_noti_open(noti_id):
+    if not current_user.is_authenticated:
+        return redirect(url_for("login_my_user"))
+
+    role = getattr(current_user.role, "value", None) or str(current_user.role)
+    if role != "QUAN_LY_KHO":
+        return redirect(url_for("login_my_user"))
+
+    n = mark_thong_bao_kho_as_read(noti_id)
+
+    return redirect(
+        url_for("phieu_nhap.index_view", nl_id=n.nguyenLieu_id or "")
+    )
+
+
+@app.route("/admin/kho/noti/delete/<int:noti_id>", methods = ['post'])
+def kho_noti_delete(noti_id):
+    if not current_user.is_authenticated:
+        return jsonify({"ok": False})
+
+    role = getattr(current_user.role, "value", None) or str(current_user.role)
+    if role != "QUAN_LY_KHO":
+        return jsonify({"ok": False})
+
+    delete_thong_bao_kho(noti_id)
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     with app.app_context():
         app.run(host="0.0.0.0", port=5000, debug=True)
+
+
+

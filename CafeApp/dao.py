@@ -7,12 +7,13 @@ from dataclasses import dataclass
 from typing import List, Tuple
 import datetime as dt
 from sqlalchemy import func
+from werkzeug.security import check_password_hash
 
 from CafeApp import db, app
 from flask import session
 from CafeApp.models import NhanVienCuaHang, SizeEnum, Topping, MonTopping, TrangThaiHoaDonEnum, ChiTietHoaDon, \
     LoaiDungEnum, HoaDon, ChiTietHoaDonTopping, KhachHang, LoaiQREnum, TrangThaiQREnum, QRCode, ThongBao, Mon, \
-    NguyenLieu, NhomNguyenLieuEnum
+    NguyenLieu, NhomNguyenLieuEnum, ThongBaoKho, TrangThaiThongBaoKhoEnum
 
 
 @dataclass
@@ -157,10 +158,18 @@ def normalize_topping_codes(selected_codes, topping_opts):
 #     ).first()
 
 def auth_user(username, password):
-    return NhanVienCuaHang.query.filter(
-        NhanVienCuaHang.tenDangNhap == username,
-        NhanVienCuaHang.matKhau == password
+    u = NhanVienCuaHang.query.filter(
+        NhanVienCuaHang.tenDangNhap == username
     ).first()
+
+    if not u:
+        return None
+
+    stored = u.matKhau or ""
+    if stored and check_password_hash(stored, password):
+        return u
+
+    return None
 
 
 
@@ -847,14 +856,30 @@ def get_inventory_report_data(
         min_qty = float(getattr(nl, "soLuongToiThieu", 0) or 0)
 
         # ===== STATUS (OK/LOW/OUT) =====
-        if qty <= 0:
+        st = "OK"
+        tt = getattr(nl, "trangThai", None)
+        tt_name = getattr(tt, "name", None) or str(tt or "")
+
+        if tt_name == "HET_HANG":
             st = "OUT"
             out_count += 1
-        elif qty <= min_qty:
+        elif tt_name == "SAP_HET":
             st = "LOW"
             low_count += 1
-        else:
+        elif tt_name == "NGUNG_SU_DUNG":
+            # nếu bạn muốn ẩn nguyên liệu ngưng sử dụng khỏi báo cáo:
+            # continue
             st = "OK"
+        else:
+            # fallback theo tồn kho (phòng dữ liệu cũ/không set trangThai)
+            if qty <= 0:
+                st = "OUT"
+                out_count += 1
+            elif qty <= min_qty:
+                st = "LOW"
+                low_count += 1
+            else:
+                st = "OK"
 
         # ===== FILTER: STATUS dropdown (OK/LOW/OUT) =====
         if status and status in ("OK", "LOW", "OUT") and st != status:
@@ -877,19 +902,15 @@ def get_inventory_report_data(
             "id": nl.id,
             "code": nl.id,
             "name": nl.name,
-
-            # dùng cho chart + (nếu bạn muốn) dropdown nhóm
             "group": group_key,
             "group_label": group_label,
-
             "qty": qty,
             "unit": nl.donViTinh,
             "min_qty": min_qty,
             "suggest_qty": max(0, min_qty - qty),
-
             "days_cover": None,
             "updated_at": getattr(nl, "ngayTao", None).strftime("%d/%m/%Y")
-                          if getattr(nl, "ngayTao", None) else None,
+            if getattr(nl, "ngayTao", None) else None,
             "location": None,
             "note": None,
             "status": st
@@ -949,3 +970,30 @@ def get_inventory_report_data(
         "export_url": None
     }
 
+# Noti Kho
+def count_unread_thong_bao_kho():
+    return ThongBaoKho.query.filter(
+        ThongBaoKho.trang_thai == TrangThaiThongBaoKhoEnum.UNREAD
+    ).count()
+
+
+def get_latest_thong_bao_kho(limit=10):
+    return (
+        ThongBaoKho.query
+        .order_by(ThongBaoKho.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def mark_thong_bao_kho_as_read(noti_id):
+    n = ThongBaoKho.query.get_or_404(noti_id)
+    n.trang_thai = TrangThaiThongBaoKhoEnum.READ
+    db.session.commit()
+    return n
+
+
+def delete_thong_bao_kho(noti_id):
+    n = ThongBaoKho.query.get_or_404(noti_id)
+    db.session.delete(n)
+    db.session.commit()

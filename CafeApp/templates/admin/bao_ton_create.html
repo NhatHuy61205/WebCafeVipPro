@@ -1,0 +1,40 @@
+{% extends 'admin/model/create.html' %}
+
+{% block head_css %}
+  {{ super() }}
+  <style>
+    ul.nav.nav-tabs{
+      margin-top: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    ul.nav.nav-tabs > li > a{
+      color:#0d9488;
+      font-weight:700;
+      padding:10px 14px;
+      border: none !important;
+      border-bottom: 3px solid transparent !important;
+    }
+    ul.nav.nav-tabs > li.active > a{
+      border-bottom-color:#0d9488 !important;
+      background: transparent !important;
+    }
+  </style>
+{% endblock %}
+
+{% block tail %}
+  {{ super() }}
+  <script>
+    (function(){
+      function fixTabs(){
+        const links = document.querySelectorAll("ul.nav.nav-tabs a");
+        links.forEach(a=>{
+          const t = (a.textContent || "").trim().toLowerCase();
+          if(t.startsWith("list")) a.textContent = "Danh sách";
+          if(t.startsWith("create")) a.textContent = "Tạo Bot";
+        });
+      }
+      fixTabs();
+      setTimeout(fixTabs, 200);
+    })();
+  </script>
+{% endblock %}

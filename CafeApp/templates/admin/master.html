@@ -1,0 +1,176 @@
+{% extends 'admin/base.html' %}
+
+{% block access_control %}
+{% if current_user.is_authenticated %}
+{% set role = current_user.role.value if current_user.role is not string and current_user.role.value is defined else current_user.role %}
+
+<ul class="nav navbar-nav navbar-right d-flex align-items-center" style="height: 100%;">
+
+    {# ===== Chuông thông báo (chỉ QL Kho) ===== #}
+    {% if role == "QUAN_LY_KHO" %}
+    <li class="nav-item dropdown" style="margin-right: 14px; position: relative;">
+        <a class="nav-link dropdown-toggle"
+           href="#"
+           id="khoNotiDropdown"
+           role="button"
+           data-toggle="dropdown"
+           aria-haspopup="true"
+           aria-expanded="false"
+           style="color:white; padding-right: 10px; position:relative;">
+            <i class="fa fa-bell"></i>
+
+            <span id="khoNotiBadge"
+                  style="display:none; position:absolute; top:2px; right:2px;
+                         background:#ff3b30; color:#fff; border-radius:999px;
+                         padding:0 6px; font-size:11px; line-height:18px; font-weight:700;">
+                0
+            </span>
+        </a>
+
+        <div class="dropdown-menu dropdown-menu-right"
+             aria-labelledby="khoNotiDropdown"
+             style="width: 380px; padding: 0;">
+            <div style="padding: 10px 12px; font-weight: 700; border-bottom: 1px solid rgba(0,0,0,.08);">
+                Thông báo kho
+            </div>
+
+            <div id="khoNotiList" style="max-height: 340px; overflow:auto;"></div>
+
+            <div style="border-top: 1px solid rgba(0,0,0,.08); padding: 8px;">
+                <a class="dropdown-item text-center"
+                   style="border-radius:10px;"
+                   href="{{ url_for('phieu_nhap.index_view') }}">
+                    Đi tới Nhập Hàng
+                </a>
+            </div>
+        </div>
+    </li>
+
+    <script>
+      (function(){
+        async function loadKhoNoti(){
+          try{
+            // count
+            const c = await fetch("/admin/kho/noti/count", {cache:"no-store"}).then(r=>r.json());
+            const badge = document.getElementById("khoNotiBadge");
+            if (badge){
+              if(c.count > 0){
+                badge.style.display = "inline-block";
+                badge.textContent = c.count;
+              } else {
+                badge.style.display = "none";
+              }
+            }
+
+            // list
+            const items = await fetch("/admin/kho/noti/list", {cache:"no-store"}).then(r=>r.json());
+            const box = document.getElementById("khoNotiList");
+            if(!box) return;
+
+            box.innerHTML = "";
+            if(!items || items.length === 0){
+              box.innerHTML = `<div class="dropdown-item text-muted" style="white-space:normal;">
+                                Chưa có thông báo.
+                               </div>`;
+              return;
+            }
+
+            items.forEach(it => {
+  const row = document.createElement("div");
+  row.className = "dropdown-item";
+  row.style.display = "flex";
+  row.style.alignItems = "flex-start";
+  row.style.justifyContent = "space-between";
+  row.style.gap = "10px";
+  row.style.whiteSpace = "normal";
+
+  // ===== BÊN TRÁI: nội dung thông báo =====
+  const left = document.createElement("div");
+  left.style.flex = "1";
+  left.style.cursor = "pointer";
+
+  left.onclick = () => {
+    window.location.href = "/admin/kho/noti/open/" + it.id;
+  };
+
+  const dot = it.unread
+    ? `<span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:#2ecc71;margin-right:8px;position:relative;top:-1px;"></span>`
+    : `<span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:transparent;margin-right:8px;"></span>`;
+
+  left.innerHTML = `
+    <div style="line-height:1.25; ${it.unread ? "font-weight:700;" : ""}">
+      ${dot}${it.message}
+    </div>
+    <div class="text-muted" style="font-size:11px; margin-top:3px;">
+      ${it.created_at}
+    </div>
+  `;
+
+  // ===== BÊN PHẢI: nút X =====
+  const del = document.createElement("span");
+  del.innerHTML = "&times;";
+  del.title = "Xóa thông báo";
+  del.style.cursor = "pointer";
+  del.style.color = "#999";
+  del.style.fontSize = "16px";
+  del.style.lineHeight = "1";
+  del.style.padding = "2px 4px";
+
+  del.onmouseenter = () => del.style.color = "#e74c3c";
+  del.onmouseleave = () => del.style.color = "#999";
+
+  del.onclick = async (e) => {
+    e.stopPropagation();
+    if (!confirm("Xóa thông báo này?")) return;
+
+    const r = await fetch("/admin/kho/noti/delete/" + it.id, {
+      method: "POST"
+    });
+    const j = await r.json();
+
+    if (j.ok) {
+      row.remove();
+      loadKhoNoti(); // refresh badge + list
+    }
+  };
+
+  row.appendChild(left);
+  row.appendChild(del);
+  box.appendChild(row);
+});
+
+          }catch(e){
+            // ignore
+          }
+        }
+
+        // load ngay + refresh mỗi 15s
+        loadKhoNoti();
+        setInterval(loadKhoNoti, 15000);
+
+        // khi bấm mở dropdown thì refresh cho “mới”
+        document.addEventListener("click", function(ev){
+          const t = ev.target;
+          if(t && (t.id === "khoNotiDropdown" || (t.closest && t.closest("#khoNotiDropdown")))){
+            loadKhoNoti();
+          }
+        });
+      })();
+    </script>
+    {% endif %}
+
+    <li class="nav-item">
+        <span class="navbar-text" style="color: white; margin-right: 20px; font-weight: bold;">
+            <i class="fa fa-user-circle"></i> Xin chào, {{ current_user.name }}
+        </span>
+    </li>
+
+    <li class="nav-item">
+        <a class="nav-link admin-logout" href="/logout" style="color:white;">
+            <i class="fa fa-sign-out"></i> Đăng Xuất
+        </a>
+    </li>
+
+</ul>
+{% endif %}
+{% endblock %}
