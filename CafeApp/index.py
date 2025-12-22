@@ -862,7 +862,7 @@ def payment_qr(hoa_don_id):
         hd.maThamChieu = f"HD{hd.id}"
         db.session.commit()
 
-    # Nếu đã thanh toán rồi -> cho chuyển thẳng qua success
+
     if hd.trangThai == TrangThaiHoaDonEnum.DA_THANH_TOAN:
         return redirect(url_for("payment_success", hoa_don_id=hd.id))
 
