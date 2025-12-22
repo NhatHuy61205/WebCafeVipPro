@@ -888,9 +888,6 @@ def payment_success(hoa_don_id):
     return render_template("payment_success.html", hoa_don=hd)
 
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    return render_template("register.html")
 
 
 @app.route("/admin")
